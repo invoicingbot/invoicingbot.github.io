@@ -315,11 +315,15 @@
   var editingId = null;
   var settingsFormBuilt = false, productsListBuilt = false;
   var searchText = '', docFilter = 'all';
+  var showArchivedClients = false, showArchivedProducts = false;
 
   var $ = function(id){ return document.getElementById(id); };
   var esc = function(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
   }); };
+  function currentUserEmail(){
+    return (auth && auth.currentUser && auth.currentUser.email) || 'unknown';
+  }
 
   function toast(msg, isError){
     var el = $('toast');
@@ -555,7 +559,7 @@
             '<button class="btn btn-primary" id="save-btn">Save '+docLabel(docType)+'</button>' +
             '<button class="btn btn-ghost" id="pdf-btn">Download PDF</button>' +
             (editingId && docType==='quote' ? '<button class="btn btn-ghost" id="convert-btn">Convert to invoice</button>' : '') +
-            (editingId ? '<button class="btn btn-danger" id="delete-btn" data-confirm="0">Delete '+docLabel(docType)+'</button>' : '') +
+            (editingId ? '<button class="btn btn-danger" id="delete-btn" data-confirm="0">Archive '+docLabel(docType)+'</button>' : '') +
           '</div>' +
         '</div>' +
 
@@ -572,8 +576,8 @@
 
   function clientOptionsHtml(selectedId){
     var opts = '<option value="">No client selected</option>';
-    opts += clients.map(function(c){
-      return '<option value="'+esc(c.id)+'"'+(c.id===selectedId?' selected':'')+'>'+esc(c.name)+'</option>';
+    opts += clients.filter(function(c){ return !c.archived || c.id===selectedId; }).map(function(c){
+      return '<option value="'+esc(c.id)+'"'+(c.id===selectedId?' selected':'')+'>'+esc(c.name)+(c.archived?' (archived)':'')+'</option>';
     }).join('');
     opts += '<option value="__new__">+ Add new client…</option>';
     return opts;
@@ -587,8 +591,8 @@
 
   function productOptionsHtml(selectedId){
     var opts = '<option value="">Custom item</option>';
-    opts += products.map(function(p){
-      return '<option value="'+esc(p.id)+'"'+(p.id===selectedId?' selected':'')+'>'+esc(p.name)+'</option>';
+    opts += products.filter(function(p){ return !p.archived || p.id===selectedId; }).map(function(p){
+      return '<option value="'+esc(p.id)+'"'+(p.id===selectedId?' selected':'')+'>'+esc(p.name)+(p.archived?' (archived)':'')+'</option>';
     }).join('');
     return opts;
   }
@@ -732,7 +736,8 @@
       if (!db){ toast('Not connected — try again in a moment.', true); return; }
       db.collection('clients').add({
         name: name, email: $('nc-email').value.trim(), phone: $('nc-phone').value.trim(),
-        address: $('nc-address').value.trim(), createdAt: new Date().toISOString()
+        address: $('nc-address').value.trim(), createdAt: new Date().toISOString(),
+        createdBy: currentUserEmail(), updatedBy: currentUserEmail()
       }).then(function(ref){
         $('inline-client').hidden = true;
         ['nc-name','nc-email','nc-phone','nc-address'].forEach(function(id){ $(id).value=''; });
@@ -758,15 +763,18 @@
     if (delBtn){
       delBtn.addEventListener('click', function(){
         if (delBtn.dataset.confirm !== '1'){
-          delBtn.dataset.confirm = '1'; delBtn.textContent = 'Confirm delete?'; delBtn.classList.add('confirming');
-          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Delete '+docLabel(docType); delBtn.classList.remove('confirming'); } }, 4000);
+          delBtn.dataset.confirm = '1'; delBtn.textContent = 'Confirm archive?'; delBtn.classList.add('confirming');
+          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Archive '+docLabel(docType); delBtn.classList.remove('confirming'); } }, 4000);
           return;
         }
         if (!db || !editingId) return;
         var coll = docType==='invoice' ? 'invoices' : 'quotes';
-        db.collection(coll).doc(editingId).delete().then(function(){
-          toast(docLabel(docType,true)+' deleted.'); startNewDoc(docType);
-        }).catch(function(){ toast('Could not delete.', true); });
+        db.collection(coll).doc(editingId).update({
+          archived:true, archivedAt:new Date().toISOString(), archivedBy: currentUserEmail(),
+          updatedAt:new Date().toISOString(), updatedBy: currentUserEmail()
+        }).then(function(){
+          toast(docLabel(docType,true)+' archived.'); startNewDoc(docType);
+        }).catch(function(){ toast('Could not archive.', true); });
       });
     }
     var discardBtn = $('discard-edit');
@@ -862,7 +870,7 @@
       items: data.items, taxRate: data.taxRate, taxLabel: settings.taxLabel || 'Tax',
       notes: data.notes, status: data.status,
       subtotal: totals.subtotal, tax: totals.tax, total: totals.total,
-      updatedAt: now
+      updatedAt: now, updatedBy: currentUserEmail()
     };
 
     if (editingId){
@@ -885,7 +893,7 @@
 
     return bump.then(function(){
       settingsExists = true;
-      return db.collection(collName).add(Object.assign({number:number, createdAt:now}, body));
+      return db.collection(collName).add(Object.assign({number:number, createdAt:now, createdBy: currentUserEmail()}, body));
     }).then(function(ref){
       editingId = ref.id;
       toast(docLabel(type,true)+' '+number+' saved.');
@@ -923,10 +931,11 @@
         taxRate: quoteRec.taxRate, taxLabel: quoteRec.taxLabel || settings.taxLabel || 'Tax',
         notes: quoteRec.notes || '', status:'draft',
         subtotal: quoteRec.subtotal, tax: quoteRec.tax, total: quoteRec.total,
-        fromQuote: quoteRec.number || null, createdAt: now, updatedAt: now
+        fromQuote: quoteRec.number || null, createdAt: now, updatedAt: now,
+        createdBy: currentUserEmail(), updatedBy: currentUserEmail()
       });
     }).then(function(ref){
-      if (quoteRec.id) db.collection('quotes').doc(quoteRec.id).update({status:'accepted', updatedAt:now}).catch(function(){});
+      if (quoteRec.id) db.collection('quotes').doc(quoteRec.id).update({status:'accepted', updatedAt:now, updatedBy: currentUserEmail()}).catch(function(){});
       toast('Converted to invoice '+number+'.');
       loadDocIntoEditor({
         id: ref.id, number:number, clientId: quoteRec.clientId, clientSnapshot: quoteRec.clientSnapshot,
@@ -1062,6 +1071,7 @@
               '<button data-filter="all" class="active">All</button>' +
               '<button data-filter="invoice">Invoices</button>' +
               '<button data-filter="quote">Quotes</button>' +
+              '<button data-filter="archived">Archived</button>' +
             '</div>' +
             '<input type="text" class="search-input" id="doc-search" placeholder="Search by client or number">' +
             '<button class="btn btn-ghost btn-sm" id="new-invoice-btn">New invoice</button>' +
@@ -1090,7 +1100,11 @@
     all.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
 
     var filtered = all.filter(function(d){
-      if (docFilter !== 'all' && d._type !== docFilter) return false;
+      if (docFilter === 'archived'){ if (!d.archived) return false; }
+      else {
+        if (d.archived) return false;
+        if (docFilter !== 'all' && d._type !== docFilter) return false;
+      }
       if (!searchText) return true;
       var name = d.clientSnapshot ? d.clientSnapshot.name : '';
       return (d.number||'').toLowerCase().indexOf(searchText) > -1 || (name||'').toLowerCase().indexOf(searchText) > -1;
@@ -1117,8 +1131,10 @@
         '<div class="amt mono">'+formatMoney(d.total, d.currency)+'</div>' +
         '<div class="row-actions">' +
           '<button class="btn btn-ghost btn-sm act-open">Open</button>' +
-          '<button class="btn btn-ghost btn-sm act-pdf">PDF</button>' +
-          '<button class="btn btn-danger btn-sm act-del" data-confirm="0">Delete</button>' +
+          (d.archived
+            ? '<button class="btn btn-ghost btn-sm act-restore">Restore</button>'
+            : '<button class="btn btn-ghost btn-sm act-pdf">PDF</button>' +
+              '<button class="btn btn-danger btn-sm act-del" data-confirm="0">Archive</button>') +
         '</div>' +
       '</div>';
     }).join('');
@@ -1128,15 +1144,25 @@
       var list = type==='invoice' ? invoices : quotes;
       var d = list.find(function(i){ return i.id === id; });
       row.querySelector('.act-open').addEventListener('click', function(){ loadDocIntoEditor(d, type); });
-      row.querySelector('.act-pdf').addEventListener('click', function(){ docType = type; downloadDocPdf(d); });
+      var pdfBtn = row.querySelector('.act-pdf');
+      if (pdfBtn) pdfBtn.addEventListener('click', function(){ docType = type; downloadDocPdf(d); });
       var delBtn = row.querySelector('.act-del');
-      delBtn.addEventListener('click', function(){
+      if (delBtn) delBtn.addEventListener('click', function(){
         if (delBtn.dataset.confirm !== '1'){
           delBtn.dataset.confirm = '1'; delBtn.textContent = 'Confirm?'; delBtn.classList.add('confirming');
-          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Delete'; delBtn.classList.remove('confirming'); } }, 4000);
+          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Archive'; delBtn.classList.remove('confirming'); } }, 4000);
           return;
         }
-        db.collection(type==='invoice'?'invoices':'quotes').doc(id).delete().then(function(){ toast(docLabel(type,true)+' deleted.'); }).catch(function(){ toast('Could not delete.', true); });
+        db.collection(type==='invoice'?'invoices':'quotes').doc(id).update({
+          archived:true, archivedAt:new Date().toISOString(), archivedBy: currentUserEmail(),
+          updatedAt:new Date().toISOString(), updatedBy: currentUserEmail()
+        }).then(function(){ toast(docLabel(type,true)+' archived.'); }).catch(function(){ toast('Could not archive.', true); });
+      });
+      var restoreBtn = row.querySelector('.act-restore');
+      if (restoreBtn) restoreBtn.addEventListener('click', function(){
+        db.collection(type==='invoice'?'invoices':'quotes').doc(id).update({
+          archived:false, updatedAt:new Date().toISOString(), updatedBy: currentUserEmail()
+        }).then(function(){ toast(docLabel(type,true)+' restored.'); }).catch(function(){ toast('Could not restore.', true); });
       });
     });
   }
@@ -1158,7 +1184,9 @@
         '<div class="btn-row"><button class="btn btn-primary btn-sm" id="cl-add">Add client</button></div>' +
       '</div>' +
       '<div class="panel">' +
-        '<div class="panel-head"><h2>Clients</h2></div>' +
+        '<div class="panel-head"><h2>Clients</h2>' +
+          '<button class="btn btn-ghost btn-sm" id="cl-toggle-archived">'+(showArchivedClients ? 'Hide archived' : 'Show archived')+'</button>' +
+        '</div>' +
         '<div id="clients-list"></div>' +
       '</div>';
 
@@ -1168,26 +1196,38 @@
       if (!db){ toast('Not connected — try again in a moment.', true); return; }
       db.collection('clients').add({
         name:name, email:$('cl-email').value.trim(), phone:$('cl-phone').value.trim(),
-        address:$('cl-address').value.trim(), createdAt:new Date().toISOString()
+        address:$('cl-address').value.trim(), createdAt:new Date().toISOString(),
+        createdBy: currentUserEmail(), updatedBy: currentUserEmail()
       }).then(function(){
         ['cl-name','cl-email','cl-phone','cl-address'].forEach(function(id){ $(id).value=''; });
         toast('Client added.');
       }).catch(function(){ toast('Could not add client.', true); });
+    });
+
+    $('cl-toggle-archived').addEventListener('click', function(){
+      showArchivedClients = !showArchivedClients;
+      renderClientsView();
+      updateClientsList();
     });
   }
 
   function updateClientsList(){
     var el = $('clients-list');
     if (!el) return;
-    if (!clients.length){
-      el.innerHTML = '<div class="empty-state"><h3>No clients yet</h3><p>Add one above to start attaching them to invoices and quotes.</p></div>';
+    var visible = clients.filter(function(c){ return showArchivedClients ? c.archived : !c.archived; });
+    if (!visible.length){
+      el.innerHTML = showArchivedClients
+        ? '<div class="empty-state"><h3>No archived clients</h3></div>'
+        : '<div class="empty-state"><h3>No clients yet</h3><p>Add one above to start attaching them to invoices and quotes.</p></div>';
       return;
     }
-    el.innerHTML = clients.map(function(c){
+    el.innerHTML = visible.map(function(c){
       var lines = [c.address, c.email, c.phone].filter(Boolean).join('\n');
       return '<div class="client-card" data-id="'+c.id+'">' +
-        '<div><div class="cname">'+esc(c.name)+'</div>'+(lines?'<div class="cmeta">'+esc(lines)+'</div>':'')+'</div>' +
-        '<button class="btn btn-danger btn-sm act-del-client" data-confirm="0">Delete</button>' +
+        '<div><div class="cname">'+esc(c.name)+(c.archived?' <span class="chip draft">Archived</span>':'')+'</div>'+(lines?'<div class="cmeta">'+esc(lines)+'</div>':'')+'</div>' +
+        (c.archived
+          ? '<button class="btn btn-ghost btn-sm act-restore-client">Restore</button>'
+          : '<button class="btn btn-danger btn-sm act-del-client" data-confirm="0">Archive</button>') +
       '</div>';
     }).join('');
     Array.prototype.forEach.call(el.querySelectorAll('.act-del-client'), function(btn){
@@ -1195,10 +1235,20 @@
         var id = btn.closest('.client-card').dataset.id;
         if (btn.dataset.confirm !== '1'){
           btn.dataset.confirm = '1'; btn.textContent = 'Confirm?'; btn.classList.add('confirming');
-          setTimeout(function(){ if (btn.dataset.confirm==='1'){ btn.dataset.confirm='0'; btn.textContent='Delete'; btn.classList.remove('confirming'); } }, 4000);
+          setTimeout(function(){ if (btn.dataset.confirm==='1'){ btn.dataset.confirm='0'; btn.textContent='Archive'; btn.classList.remove('confirming'); } }, 4000);
           return;
         }
-        db.collection('clients').doc(id).delete().then(function(){ toast('Client deleted.'); }).catch(function(){ toast('Could not delete client.', true); });
+        db.collection('clients').doc(id).update({
+          archived:true, archivedAt:new Date().toISOString(), archivedBy: currentUserEmail(), updatedBy: currentUserEmail()
+        }).then(function(){ toast('Client archived.'); }).catch(function(){ toast('Could not archive client.', true); });
+      });
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('.act-restore-client'), function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.closest('.client-card').dataset.id;
+        db.collection('clients').doc(id).update({
+          archived:false, updatedBy: currentUserEmail()
+        }).then(function(){ toast('Client restored.'); }).catch(function(){ toast('Could not restore client.', true); });
       });
     });
   }
@@ -1241,7 +1291,9 @@
         '<div class="btn-row"><button class="btn btn-primary" id="settings-save">Save settings</button></div>' +
       '</div>' +
       '<div class="panel" id="products-panel">' +
-        '<div class="panel-head"><h2>Products &amp; pricing</h2></div>' +
+        '<div class="panel-head"><h2>Products &amp; pricing</h2>' +
+          '<button class="btn btn-ghost btn-sm" id="pc-toggle-archived">'+(showArchivedProducts ? 'Hide archived' : 'Show archived')+'</button>' +
+        '</div>' +
         '<p class="settings-note">Cost price and margin are only shown here — never on a quote, invoice, or PDF. Selecting a product on a line item fills in its description and prices it by quantity automatically.</p>' +
         '<div id="add-product-form">' +
           '<div class="field-row">' +
@@ -1271,7 +1323,7 @@
         nextQuoteNumber: Math.max(1, Number($('set-next-quote-number').value)||1),
         paymentDetails: $('set-payment-details').value.trim(),
         defaultNotes: $('set-default-notes').value.trim(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(), updatedBy: currentUserEmail()
       };
       db.doc('settings/business').set(body).then(function(){
         settingsExists = true;
@@ -1287,13 +1339,18 @@
         name:name, description:$('np-desc').value.trim(),
         cost:Number($('np-cost').value)||0, tier1Price:Number($('np-price').value)||0,
         tier2Min:null, tier2Price:null, tier3Min:null, tier3Price:null,
-        createdAt:new Date().toISOString()
+        createdAt:new Date().toISOString(), createdBy: currentUserEmail(), updatedBy: currentUserEmail()
       }).then(function(){
         ['np-name','np-desc'].forEach(function(id){ $(id).value=''; });
         $('np-cost').value = 0; $('np-price').value = 0;
         toast('Product added.');
         updateProductsSettingsList();
       }).catch(function(){ toast('Could not add product.', true); });
+    });
+
+    $('pc-toggle-archived').addEventListener('click', function(){
+      showArchivedProducts = !showArchivedProducts;
+      renderSettingsForm();
     });
 
     productsListBuilt = true;
@@ -1312,12 +1369,16 @@
   function updateProductsSettingsList(){
     var el = $('products-list');
     if (!el) return;
-    if (!products.length){
-      el.innerHTML = '<div class="empty-state"><h3>No products yet</h3><p>Add one above to start pricing it on quotes and invoices.</p></div>';
+    var visible = products.filter(function(p){ return showArchivedProducts ? p.archived : !p.archived; });
+    if (!visible.length){
+      el.innerHTML = showArchivedProducts
+        ? '<div class="empty-state"><h3>No archived products</h3></div>'
+        : '<div class="empty-state"><h3>No products yet</h3><p>Add one above to start pricing it on quotes and invoices.</p></div>';
       return;
     }
-    el.innerHTML = products.map(function(p){
+    el.innerHTML = visible.map(function(p){
       return '<div class="product-card" data-id="'+p.id+'">' +
+        (p.archived ? '<div class="chip draft" style="margin-bottom:10px;">Archived</div>' : '') +
         '<div class="field-row">' +
           '<div class="field"><label>Product</label><input type="text" class="pc-name" value="'+esc(p.name)+'"></div>' +
           '<div class="field"><label>Description</label><input type="text" class="pc-desc" value="'+esc(p.description)+'"></div>' +
@@ -1329,8 +1390,10 @@
           tierBoxHtml('', p.tier3Price||0, p.cost, true, p.tier3Min||20) +
         '</div>' +
         '<div class="btn-row">' +
-          '<button class="btn btn-primary btn-sm pc-save">Save changes</button>' +
-          '<button class="btn btn-danger btn-sm pc-del" data-confirm="0">Delete product</button>' +
+          (p.archived
+            ? '<button class="btn btn-ghost btn-sm pc-restore">Restore product</button>'
+            : '<button class="btn btn-primary btn-sm pc-save">Save changes</button>' +
+              '<button class="btn btn-danger btn-sm pc-del" data-confirm="0">Archive product</button>') +
         '</div>' +
       '</div>';
     }).join('');
@@ -1344,7 +1407,8 @@
           box.querySelector('.margin-readout').textContent = 'Margin ' + marginPct(price, cost).toFixed(1) + '%';
         });
       });
-      card.querySelector('.pc-save').addEventListener('click', function(){
+      var saveBtn = card.querySelector('.pc-save');
+      if (saveBtn) saveBtn.addEventListener('click', function(){
         var id = card.dataset.id;
         var boxes = card.querySelectorAll('.tier-box');
         var tier2From = Number(boxes[1].querySelector('.tier-from').value)||10;
@@ -1355,7 +1419,8 @@
           cost: Number(card.querySelector('.pc-cost').value)||0,
           tier1Price: Number(boxes[0].querySelector('.tier-price').value)||0,
           tier2Min: tier2From, tier2Price: Number(boxes[1].querySelector('.tier-price').value)||0,
-          tier3Min: tier3From, tier3Price: Number(boxes[2].querySelector('.tier-price').value)||0
+          tier3Min: tier3From, tier3Price: Number(boxes[2].querySelector('.tier-price').value)||0,
+          updatedBy: currentUserEmail()
         };
         if (!body.name){ toast('Give the product a name first.', true); return; }
         db.collection('products').doc(id).update(body).then(function(){
@@ -1363,15 +1428,25 @@
         }).catch(function(){ toast('Could not update product.', true); });
       });
       var delBtn = card.querySelector('.pc-del');
-      delBtn.addEventListener('click', function(){
+      if (delBtn) delBtn.addEventListener('click', function(){
         if (delBtn.dataset.confirm !== '1'){
-          delBtn.dataset.confirm = '1'; delBtn.textContent = 'Confirm delete?'; delBtn.classList.add('confirming');
-          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Delete product'; delBtn.classList.remove('confirming'); } }, 4000);
+          delBtn.dataset.confirm = '1'; delBtn.textContent = 'Confirm archive?'; delBtn.classList.add('confirming');
+          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Archive product'; delBtn.classList.remove('confirming'); } }, 4000);
           return;
         }
-        db.collection('products').doc(card.dataset.id).delete().then(function(){
-          toast('Product deleted.'); updateProductsSettingsList();
-        }).catch(function(){ toast('Could not delete product.', true); });
+        db.collection('products').doc(card.dataset.id).update({
+          archived:true, archivedAt:new Date().toISOString(), archivedBy: currentUserEmail(), updatedBy: currentUserEmail()
+        }).then(function(){
+          toast('Product archived.'); updateProductsSettingsList();
+        }).catch(function(){ toast('Could not archive product.', true); });
+      });
+      var restoreBtn = card.querySelector('.pc-restore');
+      if (restoreBtn) restoreBtn.addEventListener('click', function(){
+        db.collection('products').doc(card.dataset.id).update({
+          archived:false, updatedBy: currentUserEmail()
+        }).then(function(){
+          toast('Product restored.'); updateProductsSettingsList();
+        }).catch(function(){ toast('Could not restore product.', true); });
       });
     });
   }
