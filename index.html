@@ -1,0 +1,1435 @@
+<title>Tools</title>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --paper:#F5F4EF;
+    --surface:#FFFFFF;
+    --surface-sunk:#EFEDE6;
+    --ink:#1B2430;
+    --ink-soft:#565F6E;
+    --ink-faint:#8B93A0;
+    --line:#DAD6CB;
+    --line-strong:#C3BEAF;
+    --accent:#2C4A9E;
+    --accent-ink:#1E3572;
+    --accent-soft:#E4E9F6;
+    --good:#3F6B4A;
+    --good-soft:#E3EEE4;
+    --warn:#B8863B;
+    --warn-soft:#F4EAD8;
+    --bad:#A63D2F;
+    --bad-soft:#F5E3DF;
+    --neutral-soft:#E8E6DE;
+    --shadow: 0 1px 2px rgba(27,36,48,0.06), 0 8px 24px -12px rgba(27,36,48,0.18);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#12161D; --surface:#1B212B; --surface-sunk:#161B23;
+      --ink:#ECEBE4; --ink-soft:#A8AEBA; --ink-faint:#6E7480;
+      --line:#2C333F; --line-strong:#3A4250;
+      --accent:#7C9AEE; --accent-ink:#AFC1F4; --accent-soft:#212C48;
+      --good:#8FC49B; --good-soft:#1C2C21;
+      --warn:#E0B871; --warn-soft:#332813;
+      --bad:#E5897A; --bad-soft:#3A211C;
+      --neutral-soft:#242A34;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#12161D; --surface:#1B212B; --surface-sunk:#161B23;
+    --ink:#ECEBE4; --ink-soft:#A8AEBA; --ink-faint:#6E7480;
+    --line:#2C333F; --line-strong:#3A4250;
+    --accent:#7C9AEE; --accent-ink:#AFC1F4; --accent-soft:#212C48;
+    --good:#8FC49B; --good-soft:#1C2C21;
+    --warn:#E0B871; --warn-soft:#332813;
+    --bad:#E5897A; --bad-soft:#3A211C;
+    --neutral-soft:#242A34;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size:15px; line-height:1.5; padding-inline:20px;
+  }
+  h1,h2,h3{ font-family:'Fraunces', Georgia, 'Times New Roman', serif; text-wrap:balance; margin:0; }
+  .mono, input[type="number"], .amount, .num{ font-family:'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace; font-variant-numeric: tabular-nums; }
+  button{ font-family:inherit; }
+  .wrap{ max-width:1180px; margin:0 auto; }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; padding-block:22px 16px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{ width:40px; height:40px; border-radius:10px; flex:none; background:var(--accent); color:var(--paper); display:flex; align-items:center; justify-content:center; font-family:'Fraunces', serif; font-weight:700; font-size:19px; }
+  .brand-text h1{ font-size:20px; font-weight:600; letter-spacing:-0.01em; }
+  .brand-text p{ margin:1px 0 0; font-size:12.5px; color:var(--ink-soft); }
+
+  .tabs{ display:flex; gap:2px; background:var(--surface-sunk); border:1px solid var(--line); border-radius:10px; padding:3px; flex-wrap:wrap; }
+  .tab{ border:none; background:transparent; color:var(--ink-soft); padding:8px 14px; border-radius:7px; font-size:13.5px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .tab:hover{ color:var(--ink); }
+  .tab.active{ background:var(--surface); color:var(--accent-ink); box-shadow:var(--shadow); }
+
+  .seg{ display:inline-flex; gap:2px; background:var(--surface-sunk); border:1px solid var(--line); border-radius:9px; padding:3px; }
+  .seg button{ border:none; background:transparent; color:var(--ink-soft); padding:6px 13px; border-radius:6px; font-size:12.5px; font-weight:600; cursor:pointer; }
+  .seg button.active{ background:var(--surface); color:var(--accent-ink); box-shadow:var(--shadow); }
+  .seg button:disabled{ opacity:0.45; cursor:not-allowed; }
+
+  .tab:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  main{ padding-bottom:64px; }
+  .view[hidden]{ display:none; }
+
+  .panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md); padding:22px; box-shadow:var(--shadow); }
+  .panel + .panel{ margin-top:18px; }
+  .panel-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .panel-head h2{ font-size:17px; font-weight:600; }
+  label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft); letter-spacing:0.02em; text-transform:uppercase; margin-bottom:5px; }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="number"], select, textarea{
+    width:100%; background:var(--surface); color:var(--ink); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:9px 10px; font-size:14px; font-family:inherit;
+  }
+  textarea{ resize:vertical; min-height:64px; font-family:'IBM Plex Sans', sans-serif; }
+  .field{ margin-bottom:14px; }
+  .field-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; }
+  .hint{ font-size:12px; color:var(--ink-faint); margin-top:5px; }
+
+  .btn{ display:inline-flex; align-items:center; gap:6px; border-radius:8px; padding:9px 16px; font-size:13.5px; font-weight:600; cursor:pointer; border:1px solid transparent; line-height:1.2; }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-ink); }
+  .btn-ghost{ background:transparent; border-color:var(--line-strong); color:var(--ink); }
+  .btn-ghost:hover{ background:var(--surface-sunk); }
+  .btn-danger{ background:transparent; border-color:var(--bad); color:var(--bad); }
+  .btn-danger:hover{ background:var(--bad-soft); }
+  .btn-danger.confirming{ background:var(--bad); color:#fff; }
+  .btn-sm{ padding:6px 11px; font-size:12.5px; }
+  .btn-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; align-items:center; }
+  .btn:disabled{ opacity:0.5; cursor:not-allowed; }
+
+  .editor-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:20px; align-items:start; }
+  .editing-flag{ font-size:12.5px; color:var(--ink-soft); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .editing-flag .num{ color:var(--ink); font-weight:600; }
+  .link-btn{ background:none; border:none; color:var(--accent); font-size:12.5px; font-weight:600; cursor:pointer; padding:0; }
+  .link-btn:hover{ color:var(--accent-ink); text-decoration:underline; }
+
+  .table-scroll{ overflow-x:auto; margin-top:4px; }
+  .items-table{ width:100%; min-width:540px; border-collapse:collapse; }
+  .items-table th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-faint); font-weight:600; padding:0 6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .items-table td{ padding:6px 6px; vertical-align:top; }
+  .items-table th.num, .items-table td.num{ text-align:right; }
+  .items-table input, .items-table select{ padding:7px 8px; font-size:13.5px; }
+  .col-prod{ width:150px; } .col-qty{ width:64px; } .col-rate{ width:100px; } .col-amt{ width:100px; } .col-rm{ width:30px; }
+  .amount-cell{ text-align:right; padding-top:9px; font-size:13.5px; color:var(--ink-soft); }
+  .row-remove{ background:none; border:none; color:var(--ink-faint); cursor:pointer; font-size:16px; line-height:1; padding:7px 4px; }
+  .row-remove:hover{ color:var(--bad); }
+  .add-line{ margin-top:10px; }
+
+  .inline-client{ background:var(--surface-sunk); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-top:10px; }
+  .inline-client[hidden]{ display:none; }
+
+  .preview-panel{ position:sticky; top:16px; }
+  .invoice-sheet{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md); box-shadow:var(--shadow); padding:30px 28px; }
+  .sheet-top{ display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-bottom:18px; border-bottom:1px solid var(--line); }
+  .sheet-biz .biz-name{ font-family:'Fraunces',serif; font-size:19px; font-weight:600; }
+  .sheet-biz p{ margin:2px 0 0; font-size:12.5px; color:var(--ink-soft); white-space:pre-line; }
+  .sheet-biz .placeholder{ color:var(--ink-faint); font-style:italic; }
+  .sheet-meta{ text-align:right; }
+  .sheet-meta .title{ font-family:'Fraunces',serif; font-size:22px; font-weight:600; color:var(--accent); }
+  .sheet-meta .num{ font-size:13px; margin-top:4px; }
+  .sheet-meta .dates{ font-size:12px; color:var(--ink-soft); margin-top:6px; line-height:1.6; }
+  .sheet-bill{ padding-block:18px; border-bottom:1px solid var(--line); }
+  .sheet-bill .label{ font-size:11px; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-faint); font-weight:600; margin-bottom:6px; }
+  .sheet-bill .client-name{ font-weight:600; font-size:14.5px; }
+  .sheet-bill p{ margin:2px 0 0; font-size:12.5px; color:var(--ink-soft); white-space:pre-line; }
+  table.sheet-items{ width:100%; border-collapse:collapse; margin-top:16px; }
+  table.sheet-items th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-faint); font-weight:600; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  table.sheet-items th.num, table.sheet-items td.num{ text-align:right; }
+  table.sheet-items td{ padding:8px 0; font-size:13.5px; border-bottom:1px solid var(--surface-sunk); }
+  .sheet-totals{ margin-top:14px; margin-left:auto; width:min(260px,100%); }
+  .sheet-totals .row{ display:flex; justify-content:space-between; padding:5px 0; font-size:13px; color:var(--ink-soft); }
+  .sheet-totals .row.total{ border-top:1px solid var(--line); margin-top:4px; padding-top:10px; font-weight:700; color:var(--ink); font-size:15.5px; }
+  .sheet-notes{ margin-top:20px; padding-top:16px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink-soft); white-space:pre-line; }
+  .sheet-notes .label{ font-size:11px; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-faint); font-weight:600; margin-bottom:5px; }
+
+  .chip{ display:inline-flex; align-items:center; gap:5px; padding:3px 9px 3px 8px; border-radius:99px; font-size:11.5px; font-weight:600; }
+  .chip::before{ content:""; width:6px; height:6px; border-radius:99px; background:currentColor; }
+  .chip.draft{ background:var(--neutral-soft); color:var(--ink-soft); }
+  .chip.sent{ background:var(--warn-soft); color:var(--warn); }
+  .chip.good{ background:var(--good-soft); color:var(--good); }
+  .chip.bad{ background:var(--bad-soft); color:var(--bad); }
+
+  .type-pill{ font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-faint); font-weight:700; border:1px solid var(--line-strong); border-radius:4px; padding:2px 6px; white-space:nowrap; }
+
+  .list-head{ display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  .search-input{ max-width:260px; }
+  .list-row{ display:grid; grid-template-columns: auto 1fr 1fr auto auto auto; gap:14px; align-items:center; padding:14px 6px; border-bottom:1px solid var(--surface-sunk); }
+  .list-row:last-child{ border-bottom:none; }
+  .list-row .num{ font-weight:600; font-size:13.5px; }
+  .list-row .meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .list-row .amt{ font-size:14.5px; text-align:right; font-weight:600; }
+  .row-actions{ display:flex; gap:6px; }
+  .empty-state{ text-align:center; padding:48px 20px; color:var(--ink-soft); }
+  .empty-state h3{ font-size:16px; margin-bottom:6px; color:var(--ink); }
+  .empty-state p{ font-size:13.5px; margin:0 0 16px; }
+  @media (max-width:760px){
+    .list-row{ grid-template-columns:1fr; row-gap:8px; }
+    .list-row .amt{ text-align:left; }
+    .row-actions{ flex-wrap:wrap; }
+  }
+
+  .client-card{ padding:14px 6px; border-bottom:1px solid var(--surface-sunk); display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+  .client-card:last-child{ border-bottom:none; }
+  .client-card .cname{ font-weight:600; font-size:14px; }
+  .client-card .cmeta{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; white-space:pre-line; }
+
+  .product-card{ border:1px solid var(--line); border-radius:var(--radius-sm); padding:16px; margin-bottom:14px; }
+  .product-card .cost-note{ font-size:11.5px; color:var(--ink-faint); margin-top:4px; }
+  .tier-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-top:12px; }
+  .tier-box{ background:var(--surface-sunk); border-radius:var(--radius-sm); padding:10px; }
+  .tier-box .tier-range{ font-size:11px; color:var(--ink-faint); font-weight:600; margin-bottom:7px; display:flex; align-items:center; gap:5px; }
+  .tier-box .tier-from{ width:44px; padding:3px 5px; font-size:11px; }
+  .tier-box .tier-price{ margin-bottom:6px; }
+  .tier-box .margin-readout{ font-size:11px; color:var(--ink-soft); }
+  .settings-note{ font-size:12px; color:var(--ink-faint); margin-bottom:14px; }
+
+  #toast{
+    position:fixed; left:50%; bottom:22px; transform:translate(-50%,12px);
+    background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:8px;
+    font-size:13.5px; box-shadow:var(--shadow); opacity:0; pointer-events:none;
+    transition:opacity .18s ease, transform .18s ease; z-index:50; max-width:calc(100% - 40px); text-align:center;
+  }
+  :root:not([data-theme="light"]) #toast{ background:var(--surface); border:1px solid var(--line-strong); color:var(--ink); }
+  :root[data-theme="dark"] #toast{ background:var(--surface); border:1px solid var(--line-strong); color:var(--ink); }
+  #toast.error{ background:var(--bad); color:#fff; border-color:transparent; }
+  #toast.show{ opacity:1; transform:translate(-50%,0); }
+
+  @media (prefers-reduced-motion:reduce){ *{ transition:none !important; } }
+
+  .login-wrap{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .login-wrap[hidden]{ display:none; }
+  .login-card{ width:100%; max-width:360px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md); box-shadow:var(--shadow); padding:30px 26px; }
+  .login-card .brand{ display:flex; align-items:center; gap:12px; margin-bottom:22px; }
+  .login-card h2{ font-size:17px; font-weight:600; margin-bottom:4px; }
+  .login-card p.sub{ font-size:12.5px; color:var(--ink-soft); margin:0 0 20px; }
+  .login-error{ font-size:12.5px; color:var(--bad); margin-top:10px; min-height:1px; }
+  .signout-btn{ background:none; border:none; color:var(--ink-faint); font-size:12px; font-weight:600; cursor:pointer; padding:6px 8px; }
+  .signout-btn:hover{ color:var(--bad); }
+</style>
+
+<div class="login-wrap" id="login-view" hidden>
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-mark">T</div>
+      <div class="brand-text">
+        <h1>Tools</h1>
+        <p>Invoicing &amp; quoting workspace</p>
+      </div>
+    </div>
+    <h2>Sign in</h2>
+    <p class="sub">Use the email and password given to you by your admin.</p>
+    <form id="login-form">
+      <div class="field"><label for="login-email">Email</label><input type="email" id="login-email" autocomplete="username" required></div>
+      <div class="field"><label for="login-password">Password</label><input type="password" id="login-password" autocomplete="current-password" required></div>
+      <div class="btn-row"><button class="btn btn-primary" type="submit" id="login-submit">Sign in</button></div>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div class="wrap" id="app-shell" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">T</div>
+      <div class="brand-text">
+        <h1>Tools</h1>
+        <p>Invoicing &amp; quoting workspace</p>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-view="new">New</button>
+      <button class="tab" data-view="documents">Documents</button>
+      <button class="tab" data-view="clients">Clients</button>
+      <button class="tab" data-view="settings">Settings</button>
+    </nav>
+    <button class="signout-btn" id="signout-btn" title="Sign out">Sign out</button>
+  </header>
+
+  <main>
+    <section class="view" id="view-new"></section>
+    <section class="view" id="view-documents" hidden></section>
+    <section class="view" id="view-clients" hidden></section>
+    <section class="view" id="view-settings" hidden></section>
+  </main>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var CURRENCIES = [
+    {code:'ZAR', symbol:'R'}, {code:'USD', symbol:'$'}, {code:'EUR', symbol:'€'},
+    {code:'GBP', symbol:'£'}, {code:'BWP', symbol:'P'}, {code:'NAD', symbol:'N$'}, {code:'AUD', symbol:'A$'}
+  ];
+  var INVOICE_STATUS_META = {
+    draft:{label:'Draft', cls:'draft'}, sent:{label:'Sent', cls:'sent'},
+    paid:{label:'Paid', cls:'good'}, void:{label:'Void', cls:'draft'}
+  };
+  var QUOTE_STATUS_META = {
+    draft:{label:'Draft', cls:'draft'}, sent:{label:'Sent', cls:'sent'},
+    accepted:{label:'Accepted', cls:'good'}, declined:{label:'Declined', cls:'bad'}, expired:{label:'Expired', cls:'draft'}
+  };
+  function statusMeta(type){ return type==='invoice' ? INVOICE_STATUS_META : QUOTE_STATUS_META; }
+  function pastDueLabel(type){ return type==='invoice' ? 'Overdue' : 'Expired'; }
+  function docLabel(type, cap){ var s = type==='invoice' ? 'invoice' : 'quote'; return cap ? (s.charAt(0).toUpperCase()+s.slice(1)) : s; }
+
+  var DEFAULT_SETTINGS = {
+    businessName:'', regNumber:'', email:'', phone:'', address:'',
+    currency:'ZAR', taxLabel:'VAT', taxRate:15,
+    invoicePrefix:'INV-', nextNumber:1,
+    quotePrefix:'QUO-', nextQuoteNumber:1,
+    paymentDetails:'', defaultNotes:''
+  };
+  var DEFAULT_PRODUCTS = [
+    {name:'Drill 21V', description:'21V Cordless drill', cost:849, tier1Price:1206.90, tier2Min:10, tier2Price:1162.20, tier3Min:20, tier3Price:1117.50},
+    {name:'Angle Grinder 21V', description:'21V Cordless Angle Grinder', cost:918, tier1Price:1239.30, tier2Min:10, tier2Price:1193.40, tier3Min:20, tier3Price:1147.50},
+    {name:'Dipper Gun', description:'Portable car pressure washer rated at 6 bar', cost:532, tier1Price:718.20, tier2Min:10, tier2Price:691.60, tier3Min:20, tier3Price:665}
+  ];
+
+  var db = null, auth = null;
+  var settings = Object.assign({}, DEFAULT_SETTINGS);
+  var settingsExists = false, settingsInitTried = false;
+  var clients = [];
+  var products = [], productsSeedTried = false;
+  var invoices = [], quotes = [];
+  var currentView = 'new';
+  var docType = 'invoice';
+  var editingId = null;
+  var settingsFormBuilt = false, productsListBuilt = false;
+  var searchText = '', docFilter = 'all';
+
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  }); };
+
+  function toast(msg, isError){
+    var el = $('toast');
+    el.textContent = msg;
+    el.className = isError ? 'error' : '';
+    requestAnimationFrame(function(){ el.classList.add('show'); });
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ el.classList.remove('show'); }, 3200);
+  }
+
+  function currencyMeta(code){
+    for (var i=0;i<CURRENCIES.length;i++) if (CURRENCIES[i].code===code) return CURRENCIES[i];
+    return {code:code, symbol:(code||'')+' '};
+  }
+  function formatMoney(amount, code){
+    var c = currencyMeta(code);
+    var n = Number(amount)||0;
+    var sign = n<0 ? '-' : '';
+    return sign + c.symbol + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+  function formatDate(iso){
+    if (!iso) return '—';
+    var d = new Date(iso+'T00:00:00');
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  }
+  function todayIso(){
+    var d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function addDaysIso(iso, n){
+    var d = new Date(iso+'T00:00:00');
+    d.setDate(d.getDate()+n);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function computeTotals(items, taxRate){
+    var subtotal = items.reduce(function(s,it){ return s + (Number(it.qty)||0)*(Number(it.rate)||0); }, 0);
+    var tax = subtotal * ((Number(taxRate)||0)/100);
+    return {subtotal:subtotal, tax:tax, total:subtotal+tax};
+  }
+  function isPastDue(doc){
+    if (doc.status !== 'sent' || !doc.dueDate) return false;
+    return doc.dueDate < todayIso();
+  }
+  function currencyOptions(selected){
+    return CURRENCIES.map(function(c){
+      return '<option value="'+c.code+'"'+(c.code===selected?' selected':'')+'>'+c.code+' ('+c.symbol+')</option>';
+    }).join('');
+  }
+  function findTierPrice(product, qty){
+    qty = Number(qty)||0;
+    if (product.tier3Min && qty >= Number(product.tier3Min)) return Number(product.tier3Price);
+    if (product.tier2Min && qty >= Number(product.tier2Min)) return Number(product.tier2Price);
+    return Number(product.tier1Price)||0;
+  }
+  function marginPct(price, cost){
+    price = Number(price)||0; cost = Number(cost)||0;
+    if (price <= 0) return 0;
+    return ((price-cost)/price*100);
+  }
+
+  /* ---------------- db wiring ---------------- */
+  function initDb(database){
+    db = database;
+    var settingsRef = db.doc('settings/business');
+    settingsRef.onSnapshot(function(snap){
+      if (snap.exists){
+        settingsExists = true;
+        settings = Object.assign({}, DEFAULT_SETTINGS, snap.data());
+      } else {
+        settingsExists = false;
+        settings = Object.assign({}, DEFAULT_SETTINGS);
+        if (!settingsInitTried){
+          settingsInitTried = true;
+          settingsRef.set(Object.assign({}, DEFAULT_SETTINGS, {updatedAt:new Date().toISOString()})).then(function(){
+            settingsExists = true;
+          }).catch(function(){});
+        }
+      }
+      if (currentView === 'settings' && !settingsFormBuilt) renderSettingsForm();
+      if (currentView === 'new') renderPreview();
+    }, function(){});
+
+    db.collection('clients').orderBy('name','asc').onSnapshot(function(snap){
+      clients = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      updateClientSelectOptions();
+      if (currentView === 'clients') updateClientsList();
+    }, function(){});
+
+    db.collection('products').orderBy('name','asc').onSnapshot(function(snap){
+      products = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      if (!productsSeedTried){
+        productsSeedTried = true;
+        if (products.length === 0) seedProductsIfNeeded();
+      }
+      updateProductSelectOptions();
+      if (currentView === 'settings' && !productsListBuilt) updateProductsSettingsList();
+      if (currentView === 'new') recomputeAutoPricedRows();
+    }, function(){});
+
+    db.collection('invoices').orderBy('createdAt','desc').onSnapshot(function(snap){
+      invoices = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      if (currentView === 'documents') updateDocumentsList();
+    }, function(){});
+    db.collection('quotes').orderBy('createdAt','desc').onSnapshot(function(snap){
+      quotes = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      if (currentView === 'documents') updateDocumentsList();
+    }, function(){});
+  }
+
+  function seedProductsIfNeeded(){
+    if (!db) return;
+    var settingsRef = db.doc('settings/business');
+    firebase.firestore().runTransaction(function(tx){
+      return tx.get(settingsRef).then(function(snap){
+        var data = snap.exists ? snap.data() : {};
+        if (data.productsSeeded) return false;
+        tx.set(settingsRef, Object.assign({}, DEFAULT_SETTINGS, data, {productsSeeded:true, updatedAt:new Date().toISOString()}), {merge:true});
+        return true;
+      });
+    }).then(function(shouldSeed){
+      if (!shouldSeed) return;
+      settingsExists = true;
+      var now = new Date().toISOString();
+      DEFAULT_PRODUCTS.forEach(function(p){
+        db.collection('products').add(Object.assign({}, p, {createdAt:now})).catch(function(){});
+      });
+    }).catch(function(){});
+  }
+
+  /* ---------------- navigation ---------------- */
+  function showView(view){
+    currentView = view;
+    ['new','documents','clients','settings'].forEach(function(v){ $('view-'+v).hidden = (v !== view); });
+    Array.prototype.forEach.call(document.querySelectorAll('#tabs .tab'), function(t){
+      t.classList.toggle('active', t.dataset.view === view);
+    });
+    if (view === 'documents') { renderDocumentsView(); updateDocumentsList(); }
+    if (view === 'clients') { renderClientsView(); updateClientsList(); }
+    if (view === 'settings' && !settingsFormBuilt) { renderSettingsForm(); }
+  }
+  $('tabs').addEventListener('click', function(e){
+    var btn = e.target.closest('.tab');
+    if (!btn) return;
+    showView(btn.dataset.view);
+  });
+
+  /* ================= NEW / EDIT DOCUMENT (invoice or quote) ================= */
+  function blankDraftItems(){ return [{productId:'', description:'', qty:1, rate:0, autoprice:false}]; }
+
+  function startNewDoc(type){
+    editingId = null;
+    docType = type;
+    var data = (type==='invoice')
+      ? { clientId:'', issueDate:todayIso(), dueDate:addDaysIso(todayIso(),14), currency:settings.currency||'ZAR', taxRate:(settings.taxRate!=null?settings.taxRate:0), status:'draft', notes:settings.defaultNotes||'', items:blankDraftItems() }
+      : { clientId:'', issueDate:todayIso(), dueDate:addDaysIso(todayIso(),30), currency:settings.currency||'ZAR', taxRate:(settings.taxRate!=null?settings.taxRate:0), status:'draft', notes:settings.defaultNotes||'', items:blankDraftItems() };
+    renderNewView(data, null);
+  }
+
+  function loadDocIntoEditor(doc, type){
+    editingId = doc.id;
+    docType = type;
+    renderNewView({
+      clientId: doc.clientId || '', issueDate: doc.issueDate, dueDate: doc.dueDate,
+      currency: doc.currency, taxRate: doc.taxRate, status: doc.status,
+      notes: doc.notes || '', items: (doc.items && doc.items.length ? doc.items.map(function(it){ return {productId: it.productId||'', description: it.description, qty: it.qty, rate: it.rate, autoprice:false}; }) : blankDraftItems())
+    }, doc.number);
+    showView('new');
+  }
+
+  function renderNewView(data, number){
+    var root = $('view-new');
+    var meta = statusMeta(docType);
+    var dateLabel = docType==='invoice' ? 'Due date' : 'Valid until';
+
+    root.innerHTML =
+      '<div class="editor-grid">' +
+        '<div class="panel form-panel">' +
+          '<div class="panel-head">' +
+            '<h2>' + (editingId ? ('Edit '+docLabel(docType)) : ('New '+docLabel(docType))) + '</h2>' +
+            (editingId
+              ? '<div class="editing-flag"><span>Editing <span class="num mono">'+esc(number||'')+'</span></span><button class="link-btn" id="discard-edit">Start new instead</button></div>'
+              : '<div class="seg" id="type-toggle"><button data-type="invoice" class="'+(docType==='invoice'?'active':'')+'">Invoice</button><button data-type="quote" class="'+(docType==='quote'?'active':'')+'">Quote</button></div>') +
+          '</div>' +
+
+          '<div class="field">' +
+            '<label for="client-select">Bill to</label>' +
+            '<select id="client-select">' + clientOptionsHtml(data.clientId) + '</select>' +
+            '<div class="inline-client" id="inline-client" hidden>' +
+              '<div class="field-row">' +
+                '<div class="field"><label for="nc-name">Client name</label><input type="text" id="nc-name" placeholder="Acme Traders"></div>' +
+                '<div class="field"><label for="nc-email">Email</label><input type="email" id="nc-email" placeholder="billing@acme.co.za"></div>' +
+              '</div>' +
+              '<div class="field-row">' +
+                '<div class="field"><label for="nc-phone">Phone</label><input type="tel" id="nc-phone" placeholder="+27 82 000 0000"></div>' +
+                '<div class="field"><label for="nc-address">Address</label><input type="text" id="nc-address" placeholder="12 Long Street, Cape Town"></div>' +
+              '</div>' +
+              '<div class="btn-row" style="margin-top:6px;">' +
+                '<button class="btn btn-primary btn-sm" id="nc-add">Add client</button>' +
+                '<button class="btn btn-ghost btn-sm" id="nc-cancel">Cancel</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="field-row">' +
+            '<div class="field"><label for="issue-date">Issue date</label><input type="date" id="issue-date" value="'+esc(data.issueDate)+'"></div>' +
+            '<div class="field"><label for="due-date">'+dateLabel+'</label><input type="date" id="due-date" value="'+esc(data.dueDate)+'"></div>' +
+            '<div class="field"><label for="currency-select">Currency</label><select id="currency-select">'+currencyOptions(data.currency)+'</select></div>' +
+          '</div>' +
+
+          '<div class="field">' +
+            '<label>Line items</label>' +
+            '<div class="table-scroll"><table class="items-table" id="items-table">' +
+              '<thead><tr><th class="col-prod">Product</th><th>Description</th><th class="num col-qty">Qty</th><th class="num col-rate">Rate</th><th class="num col-amt">Amount</th><th class="col-rm"></th></tr></thead>' +
+              '<tbody id="items-tbody"></tbody>' +
+            '</table></div>' +
+            '<button class="btn btn-ghost btn-sm add-line" id="add-line-btn">+ Add line</button>' +
+          '</div>' +
+
+          '<div class="field-row">' +
+            '<div class="field"><label for="tax-rate-input">'+esc(settings.taxLabel||'Tax')+' rate (%)</label><input type="number" id="tax-rate-input" step="0.01" min="0" value="'+esc(data.taxRate)+'"></div>' +
+            '<div class="field"><label for="status-select">Status</label><select id="status-select">' +
+              Object.keys(meta).map(function(k){ return '<option value="'+k+'"'+(k===data.status?' selected':'')+'>'+meta[k].label+'</option>'; }).join('') +
+            '</select></div>' +
+          '</div>' +
+
+          '<div class="field">' +
+            '<label for="notes-textarea">Notes / terms</label>' +
+            '<textarea id="notes-textarea" placeholder="'+(docType==='invoice'?'Payment due within 14 days. Thank you for your business.':'Prices exclude delivery unless stated. Quote valid for the period shown above.')+'">'+esc(data.notes)+'</textarea>' +
+          '</div>' +
+
+          '<div class="btn-row">' +
+            '<button class="btn btn-primary" id="save-btn">Save '+docLabel(docType)+'</button>' +
+            '<button class="btn btn-ghost" id="pdf-btn">Download PDF</button>' +
+            (editingId && docType==='quote' ? '<button class="btn btn-ghost" id="convert-btn">Convert to invoice</button>' : '') +
+            (editingId ? '<button class="btn btn-danger" id="delete-btn" data-confirm="0">Delete '+docLabel(docType)+'</button>' : '') +
+          '</div>' +
+        '</div>' +
+
+        '<div class="panel preview-panel">' +
+          '<div class="panel-head"><h2>Preview</h2></div>' +
+          '<div class="invoice-sheet" id="invoice-preview"></div>' +
+        '</div>' +
+      '</div>';
+
+    buildItemsRows(data.items);
+    wireNewViewEvents();
+    renderPreview();
+  }
+
+  function clientOptionsHtml(selectedId){
+    var opts = '<option value="">No client selected</option>';
+    opts += clients.map(function(c){
+      return '<option value="'+esc(c.id)+'"'+(c.id===selectedId?' selected':'')+'>'+esc(c.name)+'</option>';
+    }).join('');
+    opts += '<option value="__new__">+ Add new client…</option>';
+    return opts;
+  }
+  function updateClientSelectOptions(){
+    var sel = $('client-select');
+    if (!sel) return;
+    var current = sel.value === '__new__' ? '' : sel.value;
+    sel.innerHTML = clientOptionsHtml(current);
+  }
+
+  function productOptionsHtml(selectedId){
+    var opts = '<option value="">Custom item</option>';
+    opts += products.map(function(p){
+      return '<option value="'+esc(p.id)+'"'+(p.id===selectedId?' selected':'')+'>'+esc(p.name)+'</option>';
+    }).join('');
+    return opts;
+  }
+  function updateProductSelectOptions(){
+    Array.prototype.forEach.call(document.querySelectorAll('.item-product'), function(sel){
+      var current = sel.value;
+      sel.innerHTML = productOptionsHtml(current);
+    });
+  }
+
+  function itemRowHtml(it){
+    var qty = it.qty!=null ? it.qty : 1;
+    var rate = it.rate!=null ? it.rate : 0;
+    return '<tr data-product-id="'+esc(it.productId||'')+'" data-autoprice="'+(it.autoprice?'1':'0')+'">' +
+      '<td class="col-prod"><select class="item-product">'+productOptionsHtml(it.productId||'')+'</select></td>' +
+      '<td><input type="text" class="item-desc" value="'+esc(it.description)+'" placeholder="Description of work or goods"></td>' +
+      '<td class="col-qty"><input type="number" class="item-qty" step="0.01" min="0" value="'+esc(qty)+'"></td>' +
+      '<td class="col-rate"><input type="number" class="item-rate" step="0.01" min="0" value="'+esc(rate)+'"></td>' +
+      '<td class="col-amt amount-cell mono amt-display">'+formatMoney((Number(qty)||0)*(Number(rate)||0), currentFormCurrency())+'</td>' +
+      '<td class="col-rm"><button class="row-remove" title="Remove line" aria-label="Remove line">×</button></td>' +
+    '</tr>';
+  }
+  function buildItemsRows(items){
+    $('items-tbody').innerHTML = items.map(itemRowHtml).join('');
+  }
+  function addItemRow(){
+    var tbody = $('items-tbody');
+    var wrap = document.createElement('tbody');
+    wrap.innerHTML = itemRowHtml({productId:'', description:'', qty:1, rate:0, autoprice:false});
+    tbody.appendChild(wrap.firstElementChild);
+    renderPreview();
+  }
+  function currentFormCurrency(){
+    var sel = $('currency-select');
+    return sel ? sel.value : (settings.currency||'ZAR');
+  }
+  function recomputeAutoPricedRows(){
+    var tbody = $('items-tbody');
+    if (!tbody) return;
+    Array.prototype.forEach.call(tbody.rows, function(tr){
+      if (tr.dataset.autoprice === '1' && tr.dataset.productId){
+        var product = products.find(function(p){ return p.id === tr.dataset.productId; });
+        if (product){
+          var qty = Number(tr.querySelector('.item-qty').value)||0;
+          tr.querySelector('.item-rate').value = findTierPrice(product, qty);
+        }
+      }
+    });
+    refreshAllAmountCells();
+    renderPreview();
+  }
+  function refreshAllAmountCells(){
+    var tbody = $('items-tbody');
+    if (!tbody) return;
+    Array.prototype.forEach.call(tbody.rows, function(tr){
+      var qty = Number(tr.querySelector('.item-qty').value)||0;
+      var rate = Number(tr.querySelector('.item-rate').value)||0;
+      tr.querySelector('.amt-display').textContent = formatMoney(qty*rate, currentFormCurrency());
+    });
+  }
+
+  function wireNewViewEvents(){
+    var typeToggle = $('type-toggle');
+    if (typeToggle){
+      typeToggle.addEventListener('click', function(e){
+        var btn = e.target.closest('button');
+        if (!btn) return;
+        startNewDoc(btn.dataset.type);
+      });
+    }
+
+    $('add-line-btn').addEventListener('click', addItemRow);
+
+    $('items-tbody').addEventListener('change', function(e){
+      if (!e.target.classList.contains('item-product')) return;
+      var tr = e.target.closest('tr');
+      var pid = e.target.value;
+      if (!pid){
+        tr.dataset.productId = ''; tr.dataset.autoprice = '0';
+      } else {
+        var product = products.find(function(p){ return p.id === pid; });
+        tr.dataset.productId = pid; tr.dataset.autoprice = '1';
+        if (product){
+          tr.querySelector('.item-desc').value = product.name;
+          var qty = Number(tr.querySelector('.item-qty').value)||1;
+          tr.querySelector('.item-rate').value = findTierPrice(product, qty);
+        }
+      }
+      refreshAllAmountCells();
+      renderPreview();
+    });
+
+    $('items-tbody').addEventListener('input', function(e){
+      var tr = e.target.closest('tr');
+      if (e.target.classList.contains('item-qty')){
+        if (tr.dataset.autoprice === '1' && tr.dataset.productId){
+          var product = products.find(function(p){ return p.id === tr.dataset.productId; });
+          if (product){
+            var qty = Number(e.target.value)||0;
+            tr.querySelector('.item-rate').value = findTierPrice(product, qty);
+          }
+        }
+      } else if (e.target.classList.contains('item-rate')){
+        if (tr.dataset.productId) tr.dataset.autoprice = '0';
+      }
+      refreshAllAmountCells();
+      renderPreview();
+    });
+    $('items-tbody').addEventListener('click', function(e){
+      var btn = e.target.closest('.row-remove');
+      if (!btn) return;
+      var tbody = $('items-tbody');
+      if (tbody.rows.length <= 1){
+        var tr = btn.closest('tr');
+        tr.dataset.productId = ''; tr.dataset.autoprice = '0';
+        tr.querySelector('.item-product').value = '';
+        tr.querySelector('.item-desc').value = '';
+        tr.querySelector('.item-qty').value = 1;
+        tr.querySelector('.item-rate').value = 0;
+      } else {
+        btn.closest('tr').remove();
+      }
+      refreshAllAmountCells();
+      renderPreview();
+    });
+
+    ['issue-date','due-date','tax-rate-input','notes-textarea','status-select'].forEach(function(id){
+      $(id).addEventListener('input', renderPreview);
+      $(id).addEventListener('change', renderPreview);
+    });
+    $('currency-select').addEventListener('change', function(){ refreshAllAmountCells(); renderPreview(); });
+
+    $('client-select').addEventListener('change', function(){
+      if (this.value === '__new__'){ $('inline-client').hidden = false; this.value = ''; }
+      renderPreview();
+    });
+    $('nc-cancel').addEventListener('click', function(){ $('inline-client').hidden = true; });
+    $('nc-add').addEventListener('click', function(){
+      var name = $('nc-name').value.trim();
+      if (!name){ toast('Give the client a name first.', true); return; }
+      if (!db){ toast('Not connected — try again in a moment.', true); return; }
+      db.collection('clients').add({
+        name: name, email: $('nc-email').value.trim(), phone: $('nc-phone').value.trim(),
+        address: $('nc-address').value.trim(), createdAt: new Date().toISOString()
+      }).then(function(ref){
+        $('inline-client').hidden = true;
+        ['nc-name','nc-email','nc-phone','nc-address'].forEach(function(id){ $(id).value=''; });
+        toast('Client added.');
+        setTimeout(function(){
+          var sel = $('client-select');
+          if (sel){ updateClientSelectOptions(); sel.value = ref.id; renderPreview(); }
+        }, 150);
+      }).catch(function(){ toast('Could not add client.', true); });
+    });
+
+    $('save-btn').addEventListener('click', function(){ saveDoc().catch(function(){}); });
+    $('pdf-btn').addEventListener('click', function(){
+      saveDoc().then(function(rec){ if (rec) return downloadDocPdf(rec); }).catch(function(){});
+    });
+    var convertBtn = $('convert-btn');
+    if (convertBtn){
+      convertBtn.addEventListener('click', function(){
+        saveDoc().then(function(rec){ if (rec) return convertQuoteToInvoice(rec); }).catch(function(){});
+      });
+    }
+    var delBtn = $('delete-btn');
+    if (delBtn){
+      delBtn.addEventListener('click', function(){
+        if (delBtn.dataset.confirm !== '1'){
+          delBtn.dataset.confirm = '1'; delBtn.textContent = 'Confirm delete?'; delBtn.classList.add('confirming');
+          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Delete '+docLabel(docType); delBtn.classList.remove('confirming'); } }, 4000);
+          return;
+        }
+        if (!db || !editingId) return;
+        var coll = docType==='invoice' ? 'invoices' : 'quotes';
+        db.collection(coll).doc(editingId).delete().then(function(){
+          toast(docLabel(docType,true)+' deleted.'); startNewDoc(docType);
+        }).catch(function(){ toast('Could not delete.', true); });
+      });
+    }
+    var discardBtn = $('discard-edit');
+    if (discardBtn) discardBtn.addEventListener('click', function(){ startNewDoc(docType); });
+  }
+
+  function getFormData(){
+    var items = Array.prototype.map.call($('items-tbody').rows, function(tr){
+      return {
+        productId: tr.dataset.productId || '',
+        description: tr.querySelector('.item-desc').value.trim(),
+        qty: Number(tr.querySelector('.item-qty').value)||0,
+        rate: Number(tr.querySelector('.item-rate').value)||0
+      };
+    }).filter(function(it){ return it.description !== '' || it.qty !== 0 || it.rate !== 0; });
+    if (!items.length) items = [{productId:'', description:'', qty:0, rate:0}];
+
+    return {
+      clientId: $('client-select').value,
+      issueDate: $('issue-date').value,
+      dueDate: $('due-date').value,
+      currency: $('currency-select').value,
+      taxRate: Number($('tax-rate-input').value)||0,
+      status: $('status-select').value,
+      notes: $('notes-textarea').value,
+      items: items
+    };
+  }
+
+  function renderPreview(){
+    var pv = $('invoice-preview');
+    if (!pv) return;
+    var data = getFormData();
+    var client = clients.find(function(c){ return c.id === data.clientId; });
+    var totals = computeTotals(data.items, data.taxRate);
+    var list = docType==='invoice' ? invoices : quotes;
+    var num = editingId ? (list.find(function(i){return i.id===editingId;})||{}).number : null;
+    var dateLabel = docType==='invoice' ? 'Due' : 'Valid until';
+    var title = docType==='invoice' ? 'Invoice' : 'Quote';
+    var draftLabel = docType==='invoice' ? 'Draft — no number yet' : 'Draft quote — no number yet';
+
+    pv.innerHTML =
+      '<div class="sheet-top">' +
+        '<div class="sheet-biz">' +
+          (settings.businessName ? '<div class="biz-name">'+esc(settings.businessName)+'</div>' : '<div class="biz-name placeholder">Add your business name in Settings</div>') +
+          (settings.address ? '<p>'+esc(settings.address)+'</p>' : '') +
+          (settings.email ? '<p>'+esc(settings.email)+'</p>' : '') +
+          (settings.phone ? '<p>'+esc(settings.phone)+'</p>' : '') +
+        '</div>' +
+        '<div class="sheet-meta">' +
+          '<div class="title">'+title+'</div>' +
+          '<div class="num mono">'+esc(num || draftLabel)+'</div>' +
+          '<div class="dates">Issued '+formatDate(data.issueDate)+'<br>'+dateLabel+' '+formatDate(data.dueDate)+'</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sheet-bill">' +
+        '<div class="label">Bill to</div>' +
+        (client
+          ? '<div class="client-name">'+esc(client.name)+'</div>' + (client.address?'<p>'+esc(client.address)+'</p>':'') + (client.email?'<p>'+esc(client.email)+'</p>':'') + (client.phone?'<p>'+esc(client.phone)+'</p>':'')
+          : '<p style="color:var(--ink-faint);font-style:italic;">No client selected</p>') +
+      '</div>' +
+      '<table class="sheet-items">' +
+        '<thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>' +
+        '<tbody>' + data.items.map(function(it){
+          return '<tr><td>'+esc(it.description||'—')+'</td><td class="num mono">'+(it.qty||0)+'</td><td class="num mono">'+formatMoney(it.rate, data.currency)+'</td><td class="num mono">'+formatMoney((it.qty||0)*(it.rate||0), data.currency)+'</td></tr>';
+        }).join('') + '</tbody>' +
+      '</table>' +
+      '<div class="sheet-totals">' +
+        '<div class="row"><span>Subtotal</span><span class="mono">'+formatMoney(totals.subtotal, data.currency)+'</span></div>' +
+        (data.taxRate ? '<div class="row"><span>'+esc(settings.taxLabel||'Tax')+' ('+data.taxRate+'%)</span><span class="mono">'+formatMoney(totals.tax, data.currency)+'</span></div>' : '') +
+        '<div class="row total"><span>Total due</span><span class="mono">'+formatMoney(totals.total, data.currency)+'</span></div>' +
+      '</div>' +
+      (data.notes ? '<div class="sheet-notes"><div class="label">Notes</div>'+esc(data.notes)+'</div>' : '') +
+      (settings.paymentDetails ? '<div class="sheet-notes"><div class="label">Payment details</div>'+esc(settings.paymentDetails)+'</div>' : '');
+  }
+
+  function saveDoc(){
+    if (!db){ toast('Not connected yet — try again in a moment.', true); return Promise.resolve(null); }
+    var type = docType;
+    var collName = type==='invoice' ? 'invoices' : 'quotes';
+    var prefixField = type==='invoice' ? 'invoicePrefix' : 'quotePrefix';
+    var counterField = type==='invoice' ? 'nextNumber' : 'nextQuoteNumber';
+
+    var data = getFormData();
+    var client = clients.find(function(c){ return c.id === data.clientId; });
+    var clientSnapshot = client ? {name:client.name, email:client.email||'', phone:client.phone||'', address:client.address||''} : null;
+    var totals = computeTotals(data.items, data.taxRate);
+    var now = new Date().toISOString();
+
+    var body = {
+      clientId: data.clientId || null, clientSnapshot: clientSnapshot,
+      issueDate: data.issueDate, dueDate: data.dueDate, currency: data.currency,
+      items: data.items, taxRate: data.taxRate, taxLabel: settings.taxLabel || 'Tax',
+      notes: data.notes, status: data.status,
+      subtotal: totals.subtotal, tax: totals.tax, total: totals.total,
+      updatedAt: now
+    };
+
+    if (editingId){
+      var list = type==='invoice' ? invoices : quotes;
+      var existingNum = (list.find(function(i){return i.id===editingId;})||{}).number;
+      return db.collection(collName).doc(editingId).update(body).then(function(){
+        toast(docLabel(type,true)+' saved.');
+        return Object.assign({id:editingId, number:existingNum, createdAt:now}, body);
+      }).catch(function(){ toast('Could not save.', true); return null; });
+    }
+
+    var settingsRef = db.doc('settings/business');
+    var prefix = settings[prefixField] || (type==='invoice' ? 'INV-' : 'QUO-');
+    var nextNum = settings[counterField] || 1;
+    var number = prefix + String(nextNum).padStart(4,'0');
+    var bumpBody = {}; bumpBody[counterField] = nextNum + 1;
+    var bump = settingsExists
+      ? settingsRef.update(bumpBody)
+      : settingsRef.set(Object.assign({}, DEFAULT_SETTINGS, settings, bumpBody, {updatedAt:now}));
+
+    return bump.then(function(){
+      settingsExists = true;
+      return db.collection(collName).add(Object.assign({number:number, createdAt:now}, body));
+    }).then(function(ref){
+      editingId = ref.id;
+      toast(docLabel(type,true)+' '+number+' saved.');
+      var flag = document.querySelector('.editing-flag');
+      var typeToggle = $('type-toggle');
+      if (flag && typeToggle){
+        var newFlag = document.createElement('div');
+        newFlag.className = 'editing-flag';
+        newFlag.innerHTML = '<span>Editing <span class="num mono">'+esc(number)+'</span></span><button class="link-btn" id="discard-edit">Start new instead</button>';
+        typeToggle.replaceWith(newFlag);
+        $('discard-edit').addEventListener('click', function(){ startNewDoc(docType); });
+      }
+      var headEl = document.querySelector('.panel-head h2');
+      if (headEl) headEl.textContent = 'Edit '+docLabel(type);
+      return Object.assign({id:ref.id, number:number, createdAt:now}, body);
+    }).catch(function(){ toast('Could not save.', true); return null; });
+  }
+
+  function convertQuoteToInvoice(quoteRec){
+    if (!db) return Promise.resolve();
+    var now = new Date().toISOString();
+    var settingsRef = db.doc('settings/business');
+    var prefix = settings.invoicePrefix || 'INV-';
+    var nextNum = settings.nextNumber || 1;
+    var number = prefix + String(nextNum).padStart(4,'0');
+    var bump = settingsExists ? settingsRef.update({nextNumber: nextNum+1}) : settingsRef.set(Object.assign({}, DEFAULT_SETTINGS, settings, {nextNumber:nextNum+1, updatedAt:now}));
+    var issue = todayIso();
+    var due = addDaysIso(issue, 14);
+
+    return bump.then(function(){
+      settingsExists = true;
+      return db.collection('invoices').add({
+        number:number, clientId: quoteRec.clientId||null, clientSnapshot: quoteRec.clientSnapshot||null,
+        issueDate: issue, dueDate: due, currency: quoteRec.currency, items: quoteRec.items,
+        taxRate: quoteRec.taxRate, taxLabel: quoteRec.taxLabel || settings.taxLabel || 'Tax',
+        notes: quoteRec.notes || '', status:'draft',
+        subtotal: quoteRec.subtotal, tax: quoteRec.tax, total: quoteRec.total,
+        fromQuote: quoteRec.number || null, createdAt: now, updatedAt: now
+      });
+    }).then(function(ref){
+      if (quoteRec.id) db.collection('quotes').doc(quoteRec.id).update({status:'accepted', updatedAt:now}).catch(function(){});
+      toast('Converted to invoice '+number+'.');
+      loadDocIntoEditor({
+        id: ref.id, number:number, clientId: quoteRec.clientId, clientSnapshot: quoteRec.clientSnapshot,
+        issueDate: issue, dueDate: due, currency: quoteRec.currency, items: quoteRec.items,
+        taxRate: quoteRec.taxRate, status:'draft', notes: quoteRec.notes
+      }, 'invoice');
+    }).catch(function(){ toast('Could not convert to invoice.', true); });
+  }
+
+  /* ================= PDF ================= */
+  function downloadDocPdf(rec){
+    if (!window.jspdf){ toast('PDF library failed to load.', true); return Promise.resolve(); }
+    var type = docType;
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({unit:'pt', format:'a4'});
+    var pageW = 595.28, marginX = 56;
+    var ink=[27,36,48], grey=[110,118,130], accent=[44,74,158], line=[214,210,199];
+
+    var y = 64;
+    doc.setTextColor.apply(doc, ink);
+    doc.setFont('helvetica','bold'); doc.setFontSize(19);
+    doc.text(settings.businessName || 'Your business name', marginX, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
+    y += 16;
+    [settings.address, settings.email, settings.phone, settings.regNumber?('Reg: '+settings.regNumber):''].forEach(function(line1){
+      if (!line1) return;
+      var ls = doc.splitTextToSize(line1, 230);
+      doc.text(ls, marginX, y); y += ls.length*11;
+    });
+
+    var ry = 64;
+    var title = type==='invoice' ? 'INVOICE' : 'QUOTE';
+    var dateLbl = type==='invoice' ? 'Due date' : 'Valid until';
+    doc.setFont('helvetica','bold'); doc.setFontSize(21); doc.setTextColor.apply(doc, accent);
+    doc.text(title, pageW-marginX, ry, {align:'right'}); ry += 20;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, ink);
+    doc.text(rec.number || 'DRAFT', pageW-marginX, ry, {align:'right'}); ry += 15;
+    doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
+    doc.text('Issue date: '+formatDate(rec.issueDate), pageW-marginX, ry, {align:'right'}); ry += 12;
+    doc.text(dateLbl+': '+formatDate(rec.dueDate), pageW-marginX, ry, {align:'right'}); ry += 12;
+    var meta = statusMeta(type);
+    doc.text('Status: '+(meta[rec.status]?meta[rec.status].label:rec.status), pageW-marginX, ry, {align:'right'});
+
+    y = Math.max(y, ry) + 26;
+    doc.setDrawColor.apply(doc, line); doc.line(marginX, y, pageW-marginX, y); y += 22;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
+    doc.text('BILL TO', marginX, y); y += 14;
+    doc.setFont('helvetica','normal'); doc.setTextColor.apply(doc, ink);
+    if (rec.clientSnapshot){
+      doc.setFontSize(11); doc.text(rec.clientSnapshot.name||'Client', marginX, y); y += 14;
+      doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
+      [rec.clientSnapshot.address, rec.clientSnapshot.email, rec.clientSnapshot.phone].forEach(function(line1){
+        if (!line1) return;
+        var ls = doc.splitTextToSize(line1, 260);
+        doc.text(ls, marginX, y); y += ls.length*11;
+      });
+    } else {
+      doc.setFontSize(10); doc.text('No client selected', marginX, y); y += 14;
+    }
+    y += 18;
+
+    var colDesc = marginX, colQty = 370, colRate = 445, colAmt = pageW-marginX;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
+    doc.text('DESCRIPTION', colDesc, y);
+    doc.text('QTY', colQty, y, {align:'right'});
+    doc.text('RATE', colRate, y, {align:'right'});
+    doc.text('AMOUNT', colAmt, y, {align:'right'});
+    y += 8;
+    doc.setDrawColor.apply(doc, line); doc.line(marginX, y, pageW-marginX, y); y += 16;
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, ink);
+    (rec.items||[]).forEach(function(it){
+      var qty = Number(it.qty)||0, rate = Number(it.rate)||0, amt = qty*rate;
+      var dl = doc.splitTextToSize(it.description || '—', 290);
+      doc.text(dl, colDesc, y);
+      doc.text(String(qty), colQty, y, {align:'right'});
+      doc.text(formatMoney(rate, rec.currency), colRate, y, {align:'right'});
+      doc.text(formatMoney(amt, rec.currency), colAmt, y, {align:'right'});
+      y += Math.max(dl.length,1)*13 + 6;
+      if (y > 730){ doc.addPage(); y = 64; }
+    });
+
+    y += 6;
+    doc.setDrawColor.apply(doc, line); doc.line(marginX, y, pageW-marginX, y); y += 20;
+
+    function totalRow(label, val, bold){
+      doc.setFont('helvetica', bold?'bold':'normal'); doc.setFontSize(bold?12:10);
+      doc.setTextColor.apply(doc, bold?ink:grey);
+      doc.text(label, colRate, y, {align:'right'});
+      doc.setTextColor.apply(doc, ink);
+      doc.text(formatMoney(val, rec.currency), colAmt, y, {align:'right'});
+      y += bold?18:15;
+    }
+    totalRow('Subtotal', rec.subtotal, false);
+    if (rec.taxRate) totalRow((rec.taxLabel||'Tax')+' ('+rec.taxRate+'%)', rec.tax, false);
+    totalRow('Total due', rec.total, true);
+    y += 18;
+
+    if (rec.notes){
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
+      doc.text('NOTES', marginX, y); y += 13;
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor.apply(doc, ink);
+      var nl = doc.splitTextToSize(rec.notes, pageW-2*marginX);
+      doc.text(nl, marginX, y); y += nl.length*12 + 14;
+    }
+    if (settings.paymentDetails){
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
+      doc.text('PAYMENT DETAILS', marginX, y); y += 13;
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor.apply(doc, ink);
+      var pl = doc.splitTextToSize(settings.paymentDetails, pageW-2*marginX);
+      doc.text(pl, marginX, y);
+    }
+
+    try {
+      doc.save((rec.number||('draft-'+type))+'.pdf');
+      toast('PDF downloaded.');
+    } catch (e){
+      toast('Could not save the PDF.', true);
+    }
+    return Promise.resolve();
+  }
+
+  /* ================= DOCUMENTS LIST (invoices + quotes) ================= */
+  function renderDocumentsView(){
+    var root = $('view-documents');
+    root.innerHTML =
+      '<div class="panel">' +
+        '<div class="list-head">' +
+          '<h2>Documents</h2>' +
+          '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">' +
+            '<div class="seg" id="doc-filter">' +
+              '<button data-filter="all" class="active">All</button>' +
+              '<button data-filter="invoice">Invoices</button>' +
+              '<button data-filter="quote">Quotes</button>' +
+            '</div>' +
+            '<input type="text" class="search-input" id="doc-search" placeholder="Search by client or number">' +
+            '<button class="btn btn-ghost btn-sm" id="new-invoice-btn">New invoice</button>' +
+            '<button class="btn btn-primary btn-sm" id="new-quote-btn">New quote</button>' +
+          '</div>' +
+        '</div>' +
+        '<div id="documents-list"></div>' +
+      '</div>';
+    $('new-invoice-btn').addEventListener('click', function(){ startNewDoc('invoice'); showView('new'); });
+    $('new-quote-btn').addEventListener('click', function(){ startNewDoc('quote'); showView('new'); });
+    $('doc-search').addEventListener('input', function(){ searchText = this.value.toLowerCase(); updateDocumentsList(); });
+    $('doc-filter').addEventListener('click', function(e){
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      docFilter = btn.dataset.filter;
+      Array.prototype.forEach.call($('doc-filter').querySelectorAll('button'), function(b){ b.classList.toggle('active', b===btn); });
+      updateDocumentsList();
+    });
+  }
+
+  function updateDocumentsList(){
+    var el = $('documents-list');
+    if (!el) return;
+    var all = invoices.map(function(d){ return Object.assign({_type:'invoice'}, d); })
+      .concat(quotes.map(function(d){ return Object.assign({_type:'quote'}, d); }));
+    all.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
+
+    var filtered = all.filter(function(d){
+      if (docFilter !== 'all' && d._type !== docFilter) return false;
+      if (!searchText) return true;
+      var name = d.clientSnapshot ? d.clientSnapshot.name : '';
+      return (d.number||'').toLowerCase().indexOf(searchText) > -1 || (name||'').toLowerCase().indexOf(searchText) > -1;
+    });
+
+    if (!filtered.length){
+      el.innerHTML = all.length
+        ? '<div class="empty-state"><h3>No matches</h3><p>Try a different search or filter.</p></div>'
+        : '<div class="empty-state"><h3>Nothing here yet</h3><p>Create your first invoice or quote and it will show up here.</p><button class="btn btn-primary btn-sm" id="empty-new-quote">New quote</button></div>';
+      var eb = $('empty-new-quote');
+      if (eb) eb.addEventListener('click', function(){ startNewDoc('quote'); showView('new'); });
+      return;
+    }
+
+    el.innerHTML = filtered.map(function(d){
+      var overdue = isPastDue(d);
+      var meta = statusMeta(d._type)[d.status] || statusMeta(d._type).draft;
+      var clientName = d.clientSnapshot ? d.clientSnapshot.name : 'No client';
+      return '<div class="list-row" data-id="'+d.id+'" data-type="'+d._type+'">' +
+        '<div><span class="type-pill">'+docLabel(d._type,true)+'</span></div>' +
+        '<div><div class="num mono">'+esc(d.number)+'</div><div class="meta">'+esc(clientName)+'</div></div>' +
+        '<div><div class="meta">Issued '+formatDate(d.issueDate)+'</div><div class="meta">'+(d._type==='invoice'?'Due ':'Valid ')+formatDate(d.dueDate)+'</div></div>' +
+        '<div>' + (overdue ? '<span class="chip bad">'+pastDueLabel(d._type)+'</span>' : '<span class="chip '+meta.cls+'">'+meta.label+'</span>') + '</div>' +
+        '<div class="amt mono">'+formatMoney(d.total, d.currency)+'</div>' +
+        '<div class="row-actions">' +
+          '<button class="btn btn-ghost btn-sm act-open">Open</button>' +
+          '<button class="btn btn-ghost btn-sm act-pdf">PDF</button>' +
+          '<button class="btn btn-danger btn-sm act-del" data-confirm="0">Delete</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    Array.prototype.forEach.call(el.querySelectorAll('.list-row'), function(row){
+      var id = row.dataset.id, type = row.dataset.type;
+      var list = type==='invoice' ? invoices : quotes;
+      var d = list.find(function(i){ return i.id === id; });
+      row.querySelector('.act-open').addEventListener('click', function(){ loadDocIntoEditor(d, type); });
+      row.querySelector('.act-pdf').addEventListener('click', function(){ docType = type; downloadDocPdf(d); });
+      var delBtn = row.querySelector('.act-del');
+      delBtn.addEventListener('click', function(){
+        if (delBtn.dataset.confirm !== '1'){
+          delBtn.dataset.confirm = '1'; delBtn.textContent = 'Confirm?'; delBtn.classList.add('confirming');
+          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Delete'; delBtn.classList.remove('confirming'); } }, 4000);
+          return;
+        }
+        db.collection(type==='invoice'?'invoices':'quotes').doc(id).delete().then(function(){ toast(docLabel(type,true)+' deleted.'); }).catch(function(){ toast('Could not delete.', true); });
+      });
+    });
+  }
+
+  /* ================= CLIENTS ================= */
+  function renderClientsView(){
+    var root = $('view-clients');
+    root.innerHTML =
+      '<div class="panel">' +
+        '<div class="panel-head"><h2>Add a client</h2></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="cl-name">Name</label><input type="text" id="cl-name" placeholder="Acme Traders"></div>' +
+          '<div class="field"><label for="cl-email">Email</label><input type="email" id="cl-email" placeholder="billing@acme.co.za"></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="cl-phone">Phone</label><input type="tel" id="cl-phone" placeholder="+27 82 000 0000"></div>' +
+          '<div class="field"><label for="cl-address">Address</label><input type="text" id="cl-address" placeholder="12 Long Street, Cape Town"></div>' +
+        '</div>' +
+        '<div class="btn-row"><button class="btn btn-primary btn-sm" id="cl-add">Add client</button></div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel-head"><h2>Clients</h2></div>' +
+        '<div id="clients-list"></div>' +
+      '</div>';
+
+    $('cl-add').addEventListener('click', function(){
+      var name = $('cl-name').value.trim();
+      if (!name){ toast('Give the client a name first.', true); return; }
+      if (!db){ toast('Not connected — try again in a moment.', true); return; }
+      db.collection('clients').add({
+        name:name, email:$('cl-email').value.trim(), phone:$('cl-phone').value.trim(),
+        address:$('cl-address').value.trim(), createdAt:new Date().toISOString()
+      }).then(function(){
+        ['cl-name','cl-email','cl-phone','cl-address'].forEach(function(id){ $(id).value=''; });
+        toast('Client added.');
+      }).catch(function(){ toast('Could not add client.', true); });
+    });
+  }
+
+  function updateClientsList(){
+    var el = $('clients-list');
+    if (!el) return;
+    if (!clients.length){
+      el.innerHTML = '<div class="empty-state"><h3>No clients yet</h3><p>Add one above to start attaching them to invoices and quotes.</p></div>';
+      return;
+    }
+    el.innerHTML = clients.map(function(c){
+      var lines = [c.address, c.email, c.phone].filter(Boolean).join('\n');
+      return '<div class="client-card" data-id="'+c.id+'">' +
+        '<div><div class="cname">'+esc(c.name)+'</div>'+(lines?'<div class="cmeta">'+esc(lines)+'</div>':'')+'</div>' +
+        '<button class="btn btn-danger btn-sm act-del-client" data-confirm="0">Delete</button>' +
+      '</div>';
+    }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.act-del-client'), function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.closest('.client-card').dataset.id;
+        if (btn.dataset.confirm !== '1'){
+          btn.dataset.confirm = '1'; btn.textContent = 'Confirm?'; btn.classList.add('confirming');
+          setTimeout(function(){ if (btn.dataset.confirm==='1'){ btn.dataset.confirm='0'; btn.textContent='Delete'; btn.classList.remove('confirming'); } }, 4000);
+          return;
+        }
+        db.collection('clients').doc(id).delete().then(function(){ toast('Client deleted.'); }).catch(function(){ toast('Could not delete client.', true); });
+      });
+    });
+  }
+
+  /* ================= SETTINGS (incl. Products & pricing) ================= */
+  function renderSettingsForm(){
+    settingsFormBuilt = true;
+    var root = $('view-settings');
+    root.innerHTML =
+      '<div class="panel">' +
+        '<div class="panel-head"><h2>Business details</h2></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="biz-name">Business name</label><input type="text" id="biz-name" value="'+esc(settings.businessName)+'" placeholder="Leave blank until you’re ready"></div>' +
+          '<div class="field"><label for="biz-reg">Registration / VAT number</label><input type="text" id="biz-reg" value="'+esc(settings.regNumber)+'"></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="biz-email">Email</label><input type="email" id="biz-email" value="'+esc(settings.email)+'"></div>' +
+          '<div class="field"><label for="biz-phone">Phone</label><input type="tel" id="biz-phone" value="'+esc(settings.phone)+'"></div>' +
+        '</div>' +
+        '<div class="field"><label for="biz-address">Address</label><textarea id="biz-address">'+esc(settings.address)+'</textarea></div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel-head"><h2>Invoicing &amp; quoting defaults</h2></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="set-currency">Default currency</label><select id="set-currency">'+currencyOptions(settings.currency)+'</select></div>' +
+          '<div class="field"><label for="set-tax-label">Tax label</label><input type="text" id="set-tax-label" value="'+esc(settings.taxLabel)+'" placeholder="VAT"></div>' +
+          '<div class="field"><label for="set-tax-rate">Default tax rate (%)</label><input type="number" step="0.01" min="0" id="set-tax-rate" value="'+esc(settings.taxRate)+'"></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="set-prefix">Invoice number prefix</label><input type="text" id="set-prefix" value="'+esc(settings.invoicePrefix)+'" placeholder="INV-"></div>' +
+          '<div class="field"><label for="set-next-number">Next invoice number</label><input type="number" min="1" id="set-next-number" value="'+esc(settings.nextNumber)+'"></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="set-quote-prefix">Quote number prefix</label><input type="text" id="set-quote-prefix" value="'+esc(settings.quotePrefix)+'" placeholder="QUO-"></div>' +
+          '<div class="field"><label for="set-next-quote-number">Next quote number</label><input type="number" min="1" id="set-next-quote-number" value="'+esc(settings.nextQuoteNumber)+'"></div>' +
+        '</div>' +
+        '<div class="hint" style="margin-bottom:14px;">Next numbers: invoice <span class="mono">'+esc((settings.invoicePrefix||'INV-')+String(settings.nextNumber||1).padStart(4,'0'))+'</span> &middot; quote <span class="mono">'+esc((settings.quotePrefix||'QUO-')+String(settings.nextQuoteNumber||1).padStart(4,'0'))+'</span>. Changing these only affects documents saved after the change.</div>' +
+        '<div class="field"><label for="set-payment-details">Payment / banking details</label><textarea id="set-payment-details" placeholder="Bank, account number, branch code">'+esc(settings.paymentDetails)+'</textarea></div>' +
+        '<div class="field"><label for="set-default-notes">Default notes / terms</label><textarea id="set-default-notes" placeholder="Pre-fills new invoices and quotes — you can still edit per document">'+esc(settings.defaultNotes)+'</textarea></div>' +
+        '<div class="btn-row"><button class="btn btn-primary" id="settings-save">Save settings</button></div>' +
+      '</div>' +
+      '<div class="panel" id="products-panel">' +
+        '<div class="panel-head"><h2>Products &amp; pricing</h2></div>' +
+        '<p class="settings-note">Cost price and margin are only shown here — never on a quote, invoice, or PDF. Selecting a product on a line item fills in its description and prices it by quantity automatically.</p>' +
+        '<div id="add-product-form">' +
+          '<div class="field-row">' +
+            '<div class="field"><label for="np-name">Product</label><input type="text" id="np-name" placeholder="e.g. Impact Driver 18V"></div>' +
+            '<div class="field"><label for="np-desc">Description</label><input type="text" id="np-desc" placeholder="Short description shown on quotes"></div>' +
+          '</div>' +
+          '<div class="field-row">' +
+            '<div class="field"><label for="np-cost">Cost price</label><input type="number" step="0.01" min="0" id="np-cost" value="0"></div>' +
+            '<div class="field"><label for="np-price">Selling price (1+ units)</label><input type="number" step="0.01" min="0" id="np-price" value="0"></div>' +
+          '</div>' +
+          '<div class="btn-row" style="margin-top:0;"><button class="btn btn-primary btn-sm" id="np-add">Add product</button></div>' +
+        '</div>' +
+        '<div id="products-list" style="margin-top:18px;"></div>' +
+      '</div>';
+
+    $('settings-save').addEventListener('click', function(){
+      if (!db){ toast('Not connected — try again in a moment.', true); return; }
+      var body = {
+        businessName: $('biz-name').value.trim(), regNumber: $('biz-reg').value.trim(),
+        email: $('biz-email').value.trim(), phone: $('biz-phone').value.trim(),
+        address: $('biz-address').value.trim(),
+        currency: $('set-currency').value, taxLabel: $('set-tax-label').value.trim() || 'Tax',
+        taxRate: Number($('set-tax-rate').value)||0,
+        invoicePrefix: $('set-prefix').value.trim() || 'INV-',
+        nextNumber: Math.max(1, Number($('set-next-number').value)||1),
+        quotePrefix: $('set-quote-prefix').value.trim() || 'QUO-',
+        nextQuoteNumber: Math.max(1, Number($('set-next-quote-number').value)||1),
+        paymentDetails: $('set-payment-details').value.trim(),
+        defaultNotes: $('set-default-notes').value.trim(),
+        updatedAt: new Date().toISOString()
+      };
+      db.doc('settings/business').set(body).then(function(){
+        settingsExists = true;
+        toast('Settings saved.');
+      }).catch(function(){ toast('Could not save settings.', true); });
+    });
+
+    $('np-add').addEventListener('click', function(){
+      var name = $('np-name').value.trim();
+      if (!name){ toast('Give the product a name first.', true); return; }
+      if (!db){ toast('Not connected — try again in a moment.', true); return; }
+      db.collection('products').add({
+        name:name, description:$('np-desc').value.trim(),
+        cost:Number($('np-cost').value)||0, tier1Price:Number($('np-price').value)||0,
+        tier2Min:null, tier2Price:null, tier3Min:null, tier3Price:null,
+        createdAt:new Date().toISOString()
+      }).then(function(){
+        ['np-name','np-desc'].forEach(function(id){ $(id).value=''; });
+        $('np-cost').value = 0; $('np-price').value = 0;
+        toast('Product added.');
+        updateProductsSettingsList();
+      }).catch(function(){ toast('Could not add product.', true); });
+    });
+
+    productsListBuilt = true;
+    updateProductsSettingsList();
+  }
+
+  function tierBoxHtml(rangeLabel, priceVal, cost, showFrom, fromVal){
+    var m = marginPct(priceVal, cost);
+    return '<div class="tier-box">' +
+      '<div class="tier-range">' + (showFrom ? ('From <input type="number" min="2" class="tier-from" value="'+esc(fromVal)+'"> units') : rangeLabel) + '</div>' +
+      '<input type="number" step="0.01" min="0" class="tier-price" value="'+esc(priceVal)+'">' +
+      '<div class="margin-readout">Margin ' + m.toFixed(1) + '%</div>' +
+    '</div>';
+  }
+
+  function updateProductsSettingsList(){
+    var el = $('products-list');
+    if (!el) return;
+    if (!products.length){
+      el.innerHTML = '<div class="empty-state"><h3>No products yet</h3><p>Add one above to start pricing it on quotes and invoices.</p></div>';
+      return;
+    }
+    el.innerHTML = products.map(function(p){
+      return '<div class="product-card" data-id="'+p.id+'">' +
+        '<div class="field-row">' +
+          '<div class="field"><label>Product</label><input type="text" class="pc-name" value="'+esc(p.name)+'"></div>' +
+          '<div class="field"><label>Description</label><input type="text" class="pc-desc" value="'+esc(p.description)+'"></div>' +
+          '<div class="field"><label>Cost price</label><input type="number" step="0.01" min="0" class="pc-cost" value="'+esc(p.cost)+'"></div>' +
+        '</div>' +
+        '<div class="tier-grid">' +
+          tierBoxHtml('1&ndash;'+(p.tier2Min?esc(p.tier2Min-1):'&infin;')+' units', p.tier1Price, p.cost, false, '') +
+          tierBoxHtml('', p.tier2Price||0, p.cost, true, p.tier2Min||10) +
+          tierBoxHtml('', p.tier3Price||0, p.cost, true, p.tier3Min||20) +
+        '</div>' +
+        '<div class="btn-row">' +
+          '<button class="btn btn-primary btn-sm pc-save">Save changes</button>' +
+          '<button class="btn btn-danger btn-sm pc-del" data-confirm="0">Delete product</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    Array.prototype.forEach.call(el.querySelectorAll('.product-card'), function(card){
+      card.addEventListener('input', function(e){
+        if (!e.target.classList.contains('pc-cost') && !e.target.classList.contains('tier-price')) return;
+        var cost = Number(card.querySelector('.pc-cost').value)||0;
+        Array.prototype.forEach.call(card.querySelectorAll('.tier-box'), function(box){
+          var price = Number(box.querySelector('.tier-price').value)||0;
+          box.querySelector('.margin-readout').textContent = 'Margin ' + marginPct(price, cost).toFixed(1) + '%';
+        });
+      });
+      card.querySelector('.pc-save').addEventListener('click', function(){
+        var id = card.dataset.id;
+        var boxes = card.querySelectorAll('.tier-box');
+        var tier2From = Number(boxes[1].querySelector('.tier-from').value)||10;
+        var tier3From = Number(boxes[2].querySelector('.tier-from').value)||20;
+        var body = {
+          name: card.querySelector('.pc-name').value.trim(),
+          description: card.querySelector('.pc-desc').value.trim(),
+          cost: Number(card.querySelector('.pc-cost').value)||0,
+          tier1Price: Number(boxes[0].querySelector('.tier-price').value)||0,
+          tier2Min: tier2From, tier2Price: Number(boxes[1].querySelector('.tier-price').value)||0,
+          tier3Min: tier3From, tier3Price: Number(boxes[2].querySelector('.tier-price').value)||0
+        };
+        if (!body.name){ toast('Give the product a name first.', true); return; }
+        db.collection('products').doc(id).update(body).then(function(){
+          toast('Product updated.');
+        }).catch(function(){ toast('Could not update product.', true); });
+      });
+      var delBtn = card.querySelector('.pc-del');
+      delBtn.addEventListener('click', function(){
+        if (delBtn.dataset.confirm !== '1'){
+          delBtn.dataset.confirm = '1'; delBtn.textContent = 'Confirm delete?'; delBtn.classList.add('confirming');
+          setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Delete product'; delBtn.classList.remove('confirming'); } }, 4000);
+          return;
+        }
+        db.collection('products').doc(card.dataset.id).delete().then(function(){
+          toast('Product deleted.'); updateProductsSettingsList();
+        }).catch(function(){ toast('Could not delete product.', true); });
+      });
+    });
+  }
+
+  /* ================= auth gate ================= */
+  var firebaseConfig = {
+    apiKey: "AIzaSyCL4WZC0lbrROWDYUzVeP57KzQpvUSV-cM",
+    authDomain: "tools-invoicing.firebaseapp.com",
+    projectId: "tools-invoicing",
+    storageBucket: "tools-invoicing.firebasestorage.app",
+    messagingSenderId: "1095043368243",
+    appId: "1:1095043368243:web:b43d68026c303061396a46"
+  };
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+
+  var dbInitialized = false;
+  var loginForm = $('login-form');
+  var loginError = $('login-error');
+  var loginSubmit = $('login-submit');
+
+  loginForm.addEventListener('submit', function(e){
+    e.preventDefault();
+    loginError.textContent = '';
+    loginSubmit.disabled = true;
+    loginSubmit.textContent = 'Signing in…';
+    var email = $('login-email').value.trim();
+    var password = $('login-password').value;
+    auth.signInWithEmailAndPassword(email, password).catch(function(err){
+      var msg = 'Could not sign in. Check your email and password.';
+      if (err && (err.code === 'auth/too-many-requests')) msg = 'Too many attempts — try again later.';
+      loginError.textContent = msg;
+    }).finally(function(){
+      loginSubmit.disabled = false;
+      loginSubmit.textContent = 'Sign in';
+    });
+  });
+
+  $('signout-btn').addEventListener('click', function(){
+    auth.signOut();
+  });
+
+  auth.onAuthStateChanged(function(user){
+    if (user){
+      $('login-view').hidden = true;
+      $('app-shell').hidden = false;
+      $('login-password').value = '';
+      if (!dbInitialized){
+        dbInitialized = true;
+        startNewDoc('invoice');
+        initDb(firebase.firestore());
+      }
+    } else {
+      $('app-shell').hidden = true;
+      $('login-view').hidden = false;
+    }
+  });
+})();
+</script>
