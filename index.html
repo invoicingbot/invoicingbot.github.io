@@ -300,11 +300,9 @@
     quotePrefix:'QUO-', nextQuoteNumber:1,
     paymentDetails:'', defaultNotes:''
   };
-  var DEFAULT_PRODUCTS = [
-    {name:'Drill 21V', description:'21V Cordless drill', cost:849, tier1Price:1206.90, tier2Min:10, tier2Price:1162.20, tier3Min:20, tier3Price:1117.50},
-    {name:'Angle Grinder 21V', description:'21V Cordless Angle Grinder', cost:918, tier1Price:1239.30, tier2Min:10, tier2Price:1193.40, tier3Min:20, tier3Price:1147.50},
-    {name:'Dipper Gun', description:'Portable car pressure washer rated at 6 bar', cost:532, tier1Price:718.20, tier2Min:10, tier2Price:691.60, tier3Min:20, tier3Price:665}
-  ];
+  // Products already live in Firestore; no seed data is shipped in this
+  // publicly-readable file so cost prices are never exposed pre-login.
+  var DEFAULT_PRODUCTS = [];
 
   var db = null, auth = null;
   var settings = Object.assign({}, DEFAULT_SETTINGS);
