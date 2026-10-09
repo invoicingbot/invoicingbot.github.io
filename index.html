@@ -1,4 +1,4 @@
-<title>Tools</title>
+<title>RLE Supplies</title>
 <meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -198,7 +198,8 @@
   .tier-box .tier-range{ font-size:11px; color:var(--ink-faint); font-weight:600; margin-bottom:7px; display:flex; align-items:center; gap:5px; }
   .tier-box .tier-from{ width:44px; padding:3px 5px; font-size:11px; }
   .tier-box .tier-price{ margin-bottom:6px; }
-  .tier-box .margin-readout{ font-size:11px; color:var(--ink-soft); }
+  .tier-box .tier-sublabel{ font-size:10px; color:var(--ink-faint); font-weight:600; text-transform:uppercase; letter-spacing:0.02em; margin:0 0 3px; }
+  .tier-box .tier-margin{ margin-bottom:0; }
   .settings-note{ font-size:12px; color:var(--ink-faint); margin-bottom:14px; }
 
   #toast{
@@ -228,9 +229,9 @@
 <div class="login-wrap" id="login-view" hidden>
   <div class="login-card">
     <div class="brand">
-      <div class="brand-mark">T</div>
+      <div class="brand-mark">R</div>
       <div class="brand-text">
-        <h1>Tools</h1>
+        <h1>RLE Supplies</h1>
         <p>Invoicing &amp; quoting workspace</p>
       </div>
     </div>
@@ -248,9 +249,9 @@
 <div class="wrap" id="app-shell" hidden>
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark">T</div>
+      <div class="brand-mark">R</div>
       <div class="brand-text">
-        <h1>Tools</h1>
+        <h1>RLE Supplies</h1>
         <p>Invoicing &amp; quoting workspace</p>
       </div>
     </div>
@@ -289,15 +290,52 @@
     draft:{label:'Draft', cls:'draft'}, sent:{label:'Sent', cls:'sent'},
     accepted:{label:'Accepted', cls:'good'}, declined:{label:'Declined', cls:'bad'}, expired:{label:'Expired', cls:'draft'}
   };
-  function statusMeta(type){ return type==='invoice' ? INVOICE_STATUS_META : QUOTE_STATUS_META; }
-  function pastDueLabel(type){ return type==='invoice' ? 'Overdue' : 'Expired'; }
-  function docLabel(type, cap){ var s = type==='invoice' ? 'invoice' : 'quote'; return cap ? (s.charAt(0).toUpperCase()+s.slice(1)) : s; }
+  var DELIVERY_STATUS_META = {
+    draft:{label:'Draft', cls:'draft'}, dispatched:{label:'Dispatched', cls:'sent'},
+    delivered:{label:'Delivered', cls:'good'}
+  };
+  function statusMeta(type){
+    if (type==='invoice') return INVOICE_STATUS_META;
+    if (type==='quote') return QUOTE_STATUS_META;
+    return DELIVERY_STATUS_META;
+  }
+  function pastDueLabel(type){ return type==='invoice' ? 'Overdue' : (type==='quote' ? 'Expired' : 'Delayed'); }
+  function docLabel(type, cap){
+    var s = type==='invoice' ? 'invoice' : (type==='quote' ? 'quote' : 'delivery note');
+    return cap ? (s.charAt(0).toUpperCase()+s.slice(1)) : s;
+  }
+  function collNameForType(type){
+    if (type==='invoice') return 'invoices';
+    if (type==='quote') return 'quotes';
+    return 'deliveryNotes';
+  }
+  function listForType(type){
+    if (type==='invoice') return invoices;
+    if (type==='quote') return quotes;
+    return deliveryNotes;
+  }
+  function prefixFieldForType(type){
+    if (type==='invoice') return 'invoicePrefix';
+    if (type==='quote') return 'quotePrefix';
+    return 'deliveryPrefix';
+  }
+  function counterFieldForType(type){
+    if (type==='invoice') return 'nextNumber';
+    if (type==='quote') return 'nextQuoteNumber';
+    return 'nextDeliveryNumber';
+  }
+  function defaultPrefixForType(type){
+    if (type==='invoice') return 'INV-';
+    if (type==='quote') return 'QUO-';
+    return 'DN-';
+  }
 
   var DEFAULT_SETTINGS = {
     businessName:'', regNumber:'', email:'', phone:'', address:'',
     currency:'ZAR', taxLabel:'VAT', taxRate:15,
     invoicePrefix:'INV-', nextNumber:1,
     quotePrefix:'QUO-', nextQuoteNumber:1,
+    deliveryPrefix:'DN-', nextDeliveryNumber:1,
     paymentDetails:'', defaultNotes:''
   };
   // Products already live in Firestore; no seed data is shipped in this
@@ -309,7 +347,7 @@
   var settingsExists = false, settingsInitTried = false;
   var clients = [];
   var products = [], productsSeedTried = false;
-  var invoices = [], quotes = [];
+  var invoices = [], quotes = [], deliveryNotes = [];
   var currentView = 'new';
   var docType = 'invoice';
   var editingId = null;
@@ -384,6 +422,13 @@
     if (price <= 0) return 0;
     return ((price-cost)/price*100);
   }
+  function priceFromMargin(margin, cost){
+    margin = Number(margin)||0; cost = Number(cost)||0;
+    if (cost <= 0) return cost;
+    if (margin >= 100) margin = 99.9;
+    if (margin < 0) margin = 0;
+    return cost / (1 - margin/100);
+  }
 
   /* ---------------- db wiring ---------------- */
   function initDb(database){
@@ -432,6 +477,10 @@
       quotes = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
       if (currentView === 'documents') updateDocumentsList();
     }, function(){});
+    db.collection('deliveryNotes').orderBy('createdAt','desc').onSnapshot(function(snap){
+      deliveryNotes = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      if (currentView === 'documents') updateDocumentsList();
+    }, function(){});
   }
 
   function seedProductsIfNeeded(){
@@ -477,9 +526,12 @@
   function startNewDoc(type){
     editingId = null;
     docType = type;
-    var data = (type==='invoice')
-      ? { clientId:'', issueDate:todayIso(), dueDate:addDaysIso(todayIso(),14), currency:settings.currency||'ZAR', taxRate:(settings.taxRate!=null?settings.taxRate:0), status:'draft', notes:settings.defaultNotes||'', items:blankDraftItems() }
-      : { clientId:'', issueDate:todayIso(), dueDate:addDaysIso(todayIso(),30), currency:settings.currency||'ZAR', taxRate:(settings.taxRate!=null?settings.taxRate:0), status:'draft', notes:settings.defaultNotes||'', items:blankDraftItems() };
+    var dueOffset = type==='invoice' ? 14 : (type==='quote' ? 30 : 3);
+    var data = {
+      clientId:'', issueDate:todayIso(), dueDate:addDaysIso(todayIso(),dueOffset),
+      currency:settings.currency||'ZAR', taxRate:(settings.taxRate!=null?settings.taxRate:0),
+      status:'draft', notes: type==='delivery' ? '' : (settings.defaultNotes||''), items:blankDraftItems()
+    };
     renderNewView(data, null);
   }
 
@@ -497,20 +549,23 @@
   function renderNewView(data, number){
     var root = $('view-new');
     var meta = statusMeta(docType);
-    var dateLabel = docType==='invoice' ? 'Due date' : 'Valid until';
+    var dateLabel = docType==='invoice' ? 'Due date' : (docType==='quote' ? 'Valid until' : 'Delivery date');
+    var notesPlaceholder = docType==='invoice' ? 'Payment due within 14 days. Thank you for your business.'
+      : (docType==='quote' ? 'Prices exclude delivery unless stated. Quote valid for the period shown above.'
+      : 'Delivery instructions, access notes, who to contact on-site, etc.');
 
     root.innerHTML =
       '<div class="editor-grid">' +
         '<div class="panel form-panel">' +
           '<div class="panel-head">' +
-            '<h2>' + (editingId ? ('Edit '+docLabel(docType)) : ('New '+docLabel(docType))) + '</h2>' +
+            '<h2>' + (editingId ? ('Edit '+docLabel(docType,true)) : ('New '+docLabel(docType))) + '</h2>' +
             (editingId
               ? '<div class="editing-flag"><span>Editing <span class="num mono">'+esc(number||'')+'</span></span><button class="link-btn" id="discard-edit">Start new instead</button></div>'
-              : '<div class="seg" id="type-toggle"><button data-type="invoice" class="'+(docType==='invoice'?'active':'')+'">Invoice</button><button data-type="quote" class="'+(docType==='quote'?'active':'')+'">Quote</button></div>') +
+              : '<div class="seg" id="type-toggle"><button data-type="invoice" class="'+(docType==='invoice'?'active':'')+'">Invoice</button><button data-type="quote" class="'+(docType==='quote'?'active':'')+'">Quote</button><button data-type="delivery" class="'+(docType==='delivery'?'active':'')+'">Delivery note</button></div>') +
           '</div>' +
 
           '<div class="field">' +
-            '<label for="client-select">Bill to</label>' +
+            '<label for="client-select">'+(docType==='delivery'?'Deliver to':'Bill to')+'</label>' +
             '<select id="client-select">' + clientOptionsHtml(data.clientId) + '</select>' +
             '<div class="inline-client" id="inline-client" hidden>' +
               '<div class="field-row">' +
@@ -531,20 +586,20 @@
           '<div class="field-row">' +
             '<div class="field"><label for="issue-date">Issue date</label><input type="date" id="issue-date" value="'+esc(data.issueDate)+'"></div>' +
             '<div class="field"><label for="due-date">'+dateLabel+'</label><input type="date" id="due-date" value="'+esc(data.dueDate)+'"></div>' +
-            '<div class="field"><label for="currency-select">Currency</label><select id="currency-select">'+currencyOptions(data.currency)+'</select></div>' +
+            (docType==='delivery' ? '' : '<div class="field"><label for="currency-select">Currency</label><select id="currency-select">'+currencyOptions(data.currency)+'</select></div>') +
           '</div>' +
 
           '<div class="field">' +
             '<label>Line items</label>' +
             '<div class="table-scroll"><table class="items-table" id="items-table">' +
-              '<thead><tr><th class="col-prod">Product</th><th>Description</th><th class="num col-qty">Qty</th><th class="num col-rate">Rate</th><th class="num col-amt">Amount</th><th class="col-rm"></th></tr></thead>' +
+              '<thead>' + itemsTableHeadHtml() + '</thead>' +
               '<tbody id="items-tbody"></tbody>' +
             '</table></div>' +
             '<button class="btn btn-ghost btn-sm add-line" id="add-line-btn">+ Add line</button>' +
           '</div>' +
 
           '<div class="field-row">' +
-            '<div class="field"><label for="tax-rate-input">'+esc(settings.taxLabel||'Tax')+' rate (%)</label><input type="number" id="tax-rate-input" step="0.01" min="0" value="'+esc(data.taxRate)+'"></div>' +
+            (docType==='delivery' ? '' : '<div class="field"><label for="tax-rate-input">'+esc(settings.taxLabel||'Tax')+' rate (%)</label><input type="number" id="tax-rate-input" step="0.01" min="0" value="'+esc(data.taxRate)+'"></div>') +
             '<div class="field"><label for="status-select">Status</label><select id="status-select">' +
               Object.keys(meta).map(function(k){ return '<option value="'+k+'"'+(k===data.status?' selected':'')+'>'+meta[k].label+'</option>'; }).join('') +
             '</select></div>' +
@@ -552,13 +607,14 @@
 
           '<div class="field">' +
             '<label for="notes-textarea">Notes / terms</label>' +
-            '<textarea id="notes-textarea" placeholder="'+(docType==='invoice'?'Payment due within 14 days. Thank you for your business.':'Prices exclude delivery unless stated. Quote valid for the period shown above.')+'">'+esc(data.notes)+'</textarea>' +
+            '<textarea id="notes-textarea" placeholder="'+notesPlaceholder+'">'+esc(data.notes)+'</textarea>' +
           '</div>' +
 
           '<div class="btn-row">' +
             '<button class="btn btn-primary" id="save-btn">Save '+docLabel(docType)+'</button>' +
             '<button class="btn btn-ghost" id="pdf-btn">Download PDF</button>' +
             (editingId && docType==='quote' ? '<button class="btn btn-ghost" id="convert-btn">Convert to invoice</button>' : '') +
+            (editingId && (docType==='invoice'||docType==='quote') ? '<button class="btn btn-ghost" id="to-delivery-btn">Create delivery note</button>' : '') +
             (editingId ? '<button class="btn btn-danger" id="delete-btn" data-confirm="0">Archive '+docLabel(docType)+'</button>' : '') +
           '</div>' +
         '</div>' +
@@ -603,15 +659,23 @@
     });
   }
 
+  function itemsTableHeadHtml(){
+    if (docType === 'delivery'){
+      return '<tr><th class="col-prod">Product</th><th>Description</th><th class="num col-qty">Qty</th><th class="col-rm"></th></tr>';
+    }
+    return '<tr><th class="col-prod">Product</th><th>Description</th><th class="num col-qty">Qty</th><th class="num col-rate">Rate</th><th class="num col-amt">Amount</th><th class="col-rm"></th></tr>';
+  }
   function itemRowHtml(it){
     var qty = it.qty!=null ? it.qty : 1;
     var rate = it.rate!=null ? it.rate : 0;
+    var rateAmtCells = docType==='delivery' ? '' :
+      '<td class="col-rate"><input type="number" class="item-rate" step="0.01" min="0" value="'+esc(rate)+'"></td>' +
+      '<td class="col-amt amount-cell mono amt-display">'+formatMoney((Number(qty)||0)*(Number(rate)||0), currentFormCurrency())+'</td>';
     return '<tr data-product-id="'+esc(it.productId||'')+'" data-autoprice="'+(it.autoprice?'1':'0')+'">' +
       '<td class="col-prod"><select class="item-product">'+productOptionsHtml(it.productId||'')+'</select></td>' +
       '<td><input type="text" class="item-desc" value="'+esc(it.description)+'" placeholder="Description of work or goods"></td>' +
       '<td class="col-qty"><input type="number" class="item-qty" step="0.01" min="0" value="'+esc(qty)+'"></td>' +
-      '<td class="col-rate"><input type="number" class="item-rate" step="0.01" min="0" value="'+esc(rate)+'"></td>' +
-      '<td class="col-amt amount-cell mono amt-display">'+formatMoney((Number(qty)||0)*(Number(rate)||0), currentFormCurrency())+'</td>' +
+      rateAmtCells +
       '<td class="col-rm"><button class="row-remove" title="Remove line" aria-label="Remove line">×</button></td>' +
     '</tr>';
   }
@@ -631,7 +695,7 @@
   }
   function recomputeAutoPricedRows(){
     var tbody = $('items-tbody');
-    if (!tbody) return;
+    if (!tbody || docType === 'delivery') return;
     Array.prototype.forEach.call(tbody.rows, function(tr){
       if (tr.dataset.autoprice === '1' && tr.dataset.productId){
         var product = products.find(function(p){ return p.id === tr.dataset.productId; });
@@ -646,7 +710,7 @@
   }
   function refreshAllAmountCells(){
     var tbody = $('items-tbody');
-    if (!tbody) return;
+    if (!tbody || docType === 'delivery') return;
     Array.prototype.forEach.call(tbody.rows, function(tr){
       var qty = Number(tr.querySelector('.item-qty').value)||0;
       var rate = Number(tr.querySelector('.item-rate').value)||0;
@@ -677,8 +741,10 @@
         tr.dataset.productId = pid; tr.dataset.autoprice = '1';
         if (product){
           tr.querySelector('.item-desc').value = product.name;
-          var qty = Number(tr.querySelector('.item-qty').value)||1;
-          tr.querySelector('.item-rate').value = findTierPrice(product, qty);
+          if (docType !== 'delivery'){
+            var qty = Number(tr.querySelector('.item-qty').value)||1;
+            tr.querySelector('.item-rate').value = findTierPrice(product, qty);
+          }
         }
       }
       refreshAllAmountCells();
@@ -688,7 +754,7 @@
     $('items-tbody').addEventListener('input', function(e){
       var tr = e.target.closest('tr');
       if (e.target.classList.contains('item-qty')){
-        if (tr.dataset.autoprice === '1' && tr.dataset.productId){
+        if (docType !== 'delivery' && tr.dataset.autoprice === '1' && tr.dataset.productId){
           var product = products.find(function(p){ return p.id === tr.dataset.productId; });
           if (product){
             var qty = Number(e.target.value)||0;
@@ -711,7 +777,8 @@
         tr.querySelector('.item-product').value = '';
         tr.querySelector('.item-desc').value = '';
         tr.querySelector('.item-qty').value = 1;
-        tr.querySelector('.item-rate').value = 0;
+        var rateEl = tr.querySelector('.item-rate');
+        if (rateEl) rateEl.value = 0;
       } else {
         btn.closest('tr').remove();
       }
@@ -720,10 +787,13 @@
     });
 
     ['issue-date','due-date','tax-rate-input','notes-textarea','status-select'].forEach(function(id){
-      $(id).addEventListener('input', renderPreview);
-      $(id).addEventListener('change', renderPreview);
+      var el = $(id);
+      if (!el) return;
+      el.addEventListener('input', renderPreview);
+      el.addEventListener('change', renderPreview);
     });
-    $('currency-select').addEventListener('change', function(){ refreshAllAmountCells(); renderPreview(); });
+    var curSel = $('currency-select');
+    if (curSel) curSel.addEventListener('change', function(){ refreshAllAmountCells(); renderPreview(); });
 
     $('client-select').addEventListener('change', function(){
       if (this.value === '__new__'){ $('inline-client').hidden = false; this.value = ''; }
@@ -759,6 +829,13 @@
         saveDoc().then(function(rec){ if (rec) return convertQuoteToInvoice(rec); }).catch(function(){});
       });
     }
+    var toDeliveryBtn = $('to-delivery-btn');
+    if (toDeliveryBtn){
+      toDeliveryBtn.addEventListener('click', function(){
+        var fromType = docType;
+        saveDoc().then(function(rec){ if (rec) return convertToDeliveryNote(rec, fromType); }).catch(function(){});
+      });
+    }
     var delBtn = $('delete-btn');
     if (delBtn){
       delBtn.addEventListener('click', function(){
@@ -768,7 +845,7 @@
           return;
         }
         if (!db || !editingId) return;
-        var coll = docType==='invoice' ? 'invoices' : 'quotes';
+        var coll = collNameForType(docType);
         db.collection(coll).doc(editingId).update({
           archived:true, archivedAt:new Date().toISOString(), archivedBy: currentUserEmail(),
           updatedAt:new Date().toISOString(), updatedBy: currentUserEmail()
@@ -783,21 +860,23 @@
 
   function getFormData(){
     var items = Array.prototype.map.call($('items-tbody').rows, function(tr){
+      var rateEl = tr.querySelector('.item-rate');
       return {
         productId: tr.dataset.productId || '',
         description: tr.querySelector('.item-desc').value.trim(),
         qty: Number(tr.querySelector('.item-qty').value)||0,
-        rate: Number(tr.querySelector('.item-rate').value)||0
+        rate: rateEl ? (Number(rateEl.value)||0) : 0
       };
     }).filter(function(it){ return it.description !== '' || it.qty !== 0 || it.rate !== 0; });
     if (!items.length) items = [{productId:'', description:'', qty:0, rate:0}];
 
+    var taxRateEl = $('tax-rate-input');
     return {
       clientId: $('client-select').value,
       issueDate: $('issue-date').value,
       dueDate: $('due-date').value,
-      currency: $('currency-select').value,
-      taxRate: Number($('tax-rate-input').value)||0,
+      currency: currentFormCurrency(),
+      taxRate: taxRateEl ? (Number(taxRateEl.value)||0) : 0,
       status: $('status-select').value,
       notes: $('notes-textarea').value,
       items: items
@@ -810,11 +889,12 @@
     var data = getFormData();
     var client = clients.find(function(c){ return c.id === data.clientId; });
     var totals = computeTotals(data.items, data.taxRate);
-    var list = docType==='invoice' ? invoices : quotes;
+    var list = listForType(docType);
     var num = editingId ? (list.find(function(i){return i.id===editingId;})||{}).number : null;
-    var dateLabel = docType==='invoice' ? 'Due' : 'Valid until';
-    var title = docType==='invoice' ? 'Invoice' : 'Quote';
-    var draftLabel = docType==='invoice' ? 'Draft — no number yet' : 'Draft quote — no number yet';
+    var dateLabel = docType==='invoice' ? 'Due' : (docType==='quote' ? 'Valid until' : 'Delivery');
+    var title = docType==='invoice' ? 'Invoice' : (docType==='quote' ? 'Quote' : 'Delivery Note');
+    var draftLabel = docType==='invoice' ? 'Draft — no number yet' : (docType==='quote' ? 'Draft quote — no number yet' : 'Draft delivery note — no number yet');
+    var isDelivery = docType === 'delivery';
 
     pv.innerHTML =
       '<div class="sheet-top">' +
@@ -831,32 +911,36 @@
         '</div>' +
       '</div>' +
       '<div class="sheet-bill">' +
-        '<div class="label">Bill to</div>' +
+        '<div class="label">'+(isDelivery?'Deliver to':'Bill to')+'</div>' +
         (client
           ? '<div class="client-name">'+esc(client.name)+'</div>' + (client.address?'<p>'+esc(client.address)+'</p>':'') + (client.email?'<p>'+esc(client.email)+'</p>':'') + (client.phone?'<p>'+esc(client.phone)+'</p>':'')
           : '<p style="color:var(--ink-faint);font-style:italic;">No client selected</p>') +
       '</div>' +
       '<table class="sheet-items">' +
-        '<thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>' +
+        '<thead><tr><th>Description</th><th class="num">Qty</th>' + (isDelivery?'':'<th class="num">Rate</th><th class="num">Amount</th>') + '</tr></thead>' +
         '<tbody>' + data.items.map(function(it){
-          return '<tr><td>'+esc(it.description||'—')+'</td><td class="num mono">'+(it.qty||0)+'</td><td class="num mono">'+formatMoney(it.rate, data.currency)+'</td><td class="num mono">'+formatMoney((it.qty||0)*(it.rate||0), data.currency)+'</td></tr>';
+          return '<tr><td>'+esc(it.description||'—')+'</td><td class="num mono">'+(it.qty||0)+'</td>' +
+            (isDelivery ? '' : '<td class="num mono">'+formatMoney(it.rate, data.currency)+'</td><td class="num mono">'+formatMoney((it.qty||0)*(it.rate||0), data.currency)+'</td>') +
+          '</tr>';
         }).join('') + '</tbody>' +
       '</table>' +
-      '<div class="sheet-totals">' +
-        '<div class="row"><span>Subtotal</span><span class="mono">'+formatMoney(totals.subtotal, data.currency)+'</span></div>' +
-        (data.taxRate ? '<div class="row"><span>'+esc(settings.taxLabel||'Tax')+' ('+data.taxRate+'%)</span><span class="mono">'+formatMoney(totals.tax, data.currency)+'</span></div>' : '') +
-        '<div class="row total"><span>Total due</span><span class="mono">'+formatMoney(totals.total, data.currency)+'</span></div>' +
-      '</div>' +
+      (isDelivery ? '' :
+        '<div class="sheet-totals">' +
+          '<div class="row"><span>Subtotal</span><span class="mono">'+formatMoney(totals.subtotal, data.currency)+'</span></div>' +
+          (data.taxRate ? '<div class="row"><span>'+esc(settings.taxLabel||'Tax')+' ('+data.taxRate+'%)</span><span class="mono">'+formatMoney(totals.tax, data.currency)+'</span></div>' : '') +
+          '<div class="row total"><span>Total due</span><span class="mono">'+formatMoney(totals.total, data.currency)+'</span></div>' +
+        '</div>') +
       (data.notes ? '<div class="sheet-notes"><div class="label">Notes</div>'+esc(data.notes)+'</div>' : '') +
-      (settings.paymentDetails ? '<div class="sheet-notes"><div class="label">Payment details</div>'+esc(settings.paymentDetails)+'</div>' : '');
+      (!isDelivery && settings.paymentDetails ? '<div class="sheet-notes"><div class="label">Payment details</div>'+esc(settings.paymentDetails)+'</div>' : '') +
+      (isDelivery ? '<div class="sheet-notes"><div class="label">Received by</div><p style="margin-top:28px;border-top:1px solid var(--line);padding-top:6px;">Signature: ________________________&nbsp;&nbsp;&nbsp; Date: ______________</p></div>' : '');
   }
 
   function saveDoc(){
     if (!db){ toast('Not connected yet — try again in a moment.', true); return Promise.resolve(null); }
     var type = docType;
-    var collName = type==='invoice' ? 'invoices' : 'quotes';
-    var prefixField = type==='invoice' ? 'invoicePrefix' : 'quotePrefix';
-    var counterField = type==='invoice' ? 'nextNumber' : 'nextQuoteNumber';
+    var collName = collNameForType(type);
+    var prefixField = prefixFieldForType(type);
+    var counterField = counterFieldForType(type);
 
     var data = getFormData();
     var client = clients.find(function(c){ return c.id === data.clientId; });
@@ -874,7 +958,7 @@
     };
 
     if (editingId){
-      var list = type==='invoice' ? invoices : quotes;
+      var list = listForType(type);
       var existingNum = (list.find(function(i){return i.id===editingId;})||{}).number;
       return db.collection(collName).doc(editingId).update(body).then(function(){
         toast(docLabel(type,true)+' saved.');
@@ -883,7 +967,7 @@
     }
 
     var settingsRef = db.doc('settings/business');
-    var prefix = settings[prefixField] || (type==='invoice' ? 'INV-' : 'QUO-');
+    var prefix = settings[prefixField] || defaultPrefixForType(type);
     var nextNum = settings[counterField] || 1;
     var number = prefix + String(nextNum).padStart(4,'0');
     var bumpBody = {}; bumpBody[counterField] = nextNum + 1;
@@ -945,6 +1029,40 @@
     }).catch(function(){ toast('Could not convert to invoice.', true); });
   }
 
+  function convertToDeliveryNote(rec, fromType){
+    if (!db) return Promise.resolve();
+    var now = new Date().toISOString();
+    var settingsRef = db.doc('settings/business');
+    var prefix = settings.deliveryPrefix || 'DN-';
+    var nextNum = settings.nextDeliveryNumber || 1;
+    var number = prefix + String(nextNum).padStart(4,'0');
+    var bump = settingsExists ? settingsRef.update({nextDeliveryNumber: nextNum+1}) : settingsRef.set(Object.assign({}, DEFAULT_SETTINGS, settings, {nextDeliveryNumber:nextNum+1, updatedAt:now}));
+    var issue = todayIso();
+    var due = addDaysIso(issue, 3);
+    var items = (rec.items||[]).map(function(it){ return {productId: it.productId||'', description: it.description, qty: it.qty, rate: it.rate}; });
+
+    return bump.then(function(){
+      settingsExists = true;
+      return db.collection('deliveryNotes').add({
+        number:number, clientId: rec.clientId||null, clientSnapshot: rec.clientSnapshot||null,
+        issueDate: issue, dueDate: due, currency: rec.currency || settings.currency || 'ZAR',
+        items: items, taxRate:0, taxLabel: settings.taxLabel || 'Tax',
+        notes:'', status:'draft',
+        subtotal:0, tax:0, total:0,
+        fromDoc: rec.number || null, fromDocType: fromType || null,
+        createdAt: now, updatedAt: now,
+        createdBy: currentUserEmail(), updatedBy: currentUserEmail()
+      });
+    }).then(function(ref){
+      toast('Delivery note '+number+' created.');
+      loadDocIntoEditor({
+        id: ref.id, number:number, clientId: rec.clientId, clientSnapshot: rec.clientSnapshot,
+        issueDate: issue, dueDate: due, currency: rec.currency, items: items,
+        status:'draft', notes:''
+      }, 'delivery');
+    }).catch(function(){ toast('Could not create delivery note.', true); });
+  }
+
   /* ================= PDF ================= */
   function downloadDocPdf(rec){
     if (!window.jspdf){ toast('PDF library failed to load.', true); return Promise.resolve(); }
@@ -966,9 +1084,10 @@
       doc.text(ls, marginX, y); y += ls.length*11;
     });
 
+    var isDelivery = type === 'delivery';
     var ry = 64;
-    var title = type==='invoice' ? 'INVOICE' : 'QUOTE';
-    var dateLbl = type==='invoice' ? 'Due date' : 'Valid until';
+    var title = type==='invoice' ? 'INVOICE' : (type==='quote' ? 'QUOTE' : 'DELIVERY NOTE');
+    var dateLbl = type==='invoice' ? 'Due date' : (type==='quote' ? 'Valid until' : 'Delivery date');
     doc.setFont('helvetica','bold'); doc.setFontSize(21); doc.setTextColor.apply(doc, accent);
     doc.text(title, pageW-marginX, ry, {align:'right'}); ry += 20;
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, ink);
@@ -983,7 +1102,7 @@
     doc.setDrawColor.apply(doc, line); doc.line(marginX, y, pageW-marginX, y); y += 22;
 
     doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
-    doc.text('BILL TO', marginX, y); y += 14;
+    doc.text(isDelivery ? 'DELIVER TO' : 'BILL TO', marginX, y); y += 14;
     doc.setFont('helvetica','normal'); doc.setTextColor.apply(doc, ink);
     if (rec.clientSnapshot){
       doc.setFontSize(11); doc.text(rec.clientSnapshot.name||'Client', marginX, y); y += 14;
@@ -998,23 +1117,28 @@
     }
     y += 18;
 
-    var colDesc = marginX, colQty = 370, colRate = 445, colAmt = pageW-marginX;
+    var colDesc = marginX, colQty = isDelivery ? (pageW-marginX) : 370, colRate = 445, colAmt = pageW-marginX;
     doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
     doc.text('DESCRIPTION', colDesc, y);
     doc.text('QTY', colQty, y, {align:'right'});
-    doc.text('RATE', colRate, y, {align:'right'});
-    doc.text('AMOUNT', colAmt, y, {align:'right'});
+    if (!isDelivery){
+      doc.text('RATE', colRate, y, {align:'right'});
+      doc.text('AMOUNT', colAmt, y, {align:'right'});
+    }
     y += 8;
     doc.setDrawColor.apply(doc, line); doc.line(marginX, y, pageW-marginX, y); y += 16;
 
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, ink);
     (rec.items||[]).forEach(function(it){
       var qty = Number(it.qty)||0, rate = Number(it.rate)||0, amt = qty*rate;
-      var dl = doc.splitTextToSize(it.description || '—', 290);
+      var descWidth = isDelivery ? (colQty - colDesc - 40) : 290;
+      var dl = doc.splitTextToSize(it.description || '—', descWidth);
       doc.text(dl, colDesc, y);
       doc.text(String(qty), colQty, y, {align:'right'});
-      doc.text(formatMoney(rate, rec.currency), colRate, y, {align:'right'});
-      doc.text(formatMoney(amt, rec.currency), colAmt, y, {align:'right'});
+      if (!isDelivery){
+        doc.text(formatMoney(rate, rec.currency), colRate, y, {align:'right'});
+        doc.text(formatMoney(amt, rec.currency), colAmt, y, {align:'right'});
+      }
       y += Math.max(dl.length,1)*13 + 6;
       if (y > 730){ doc.addPage(); y = 64; }
     });
@@ -1022,18 +1146,22 @@
     y += 6;
     doc.setDrawColor.apply(doc, line); doc.line(marginX, y, pageW-marginX, y); y += 20;
 
-    function totalRow(label, val, bold){
-      doc.setFont('helvetica', bold?'bold':'normal'); doc.setFontSize(bold?12:10);
-      doc.setTextColor.apply(doc, bold?ink:grey);
-      doc.text(label, colRate, y, {align:'right'});
-      doc.setTextColor.apply(doc, ink);
-      doc.text(formatMoney(val, rec.currency), colAmt, y, {align:'right'});
-      y += bold?18:15;
+    if (!isDelivery){
+      (function(){
+        function totalRow(label, val, bold){
+          doc.setFont('helvetica', bold?'bold':'normal'); doc.setFontSize(bold?12:10);
+          doc.setTextColor.apply(doc, bold?ink:grey);
+          doc.text(label, colRate, y, {align:'right'});
+          doc.setTextColor.apply(doc, ink);
+          doc.text(formatMoney(val, rec.currency), colAmt, y, {align:'right'});
+          y += bold?18:15;
+        }
+        totalRow('Subtotal', rec.subtotal, false);
+        if (rec.taxRate) totalRow((rec.taxLabel||'Tax')+' ('+rec.taxRate+'%)', rec.tax, false);
+        totalRow('Total due', rec.total, true);
+        y += 18;
+      })();
     }
-    totalRow('Subtotal', rec.subtotal, false);
-    if (rec.taxRate) totalRow((rec.taxLabel||'Tax')+' ('+rec.taxRate+'%)', rec.tax, false);
-    totalRow('Total due', rec.total, true);
-    y += 18;
 
     if (rec.notes){
       doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
@@ -1042,12 +1170,24 @@
       var nl = doc.splitTextToSize(rec.notes, pageW-2*marginX);
       doc.text(nl, marginX, y); y += nl.length*12 + 14;
     }
-    if (settings.paymentDetails){
+    if (settings.paymentDetails && !isDelivery){
       doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
       doc.text('PAYMENT DETAILS', marginX, y); y += 13;
       doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor.apply(doc, ink);
       var pl = doc.splitTextToSize(settings.paymentDetails, pageW-2*marginX);
-      doc.text(pl, marginX, y);
+      doc.text(pl, marginX, y); y += pl.length*12 + 14;
+    }
+
+    if (isDelivery){
+      y += 24;
+      if (y > 700){ doc.addPage(); y = 64; }
+      doc.setDrawColor.apply(doc, line);
+      doc.line(marginX, y, marginX+200, y);
+      doc.line(marginX+260, y, marginX+460, y);
+      y += 12;
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, grey);
+      doc.text('Received by (signature)', marginX, y);
+      doc.text('Date', marginX+260, y);
     }
 
     try {
@@ -1059,7 +1199,7 @@
     return Promise.resolve();
   }
 
-  /* ================= DOCUMENTS LIST (invoices + quotes) ================= */
+  /* ================= DOCUMENTS LIST (invoices + quotes + delivery notes) ================= */
   function renderDocumentsView(){
     var root = $('view-documents');
     root.innerHTML =
@@ -1071,10 +1211,12 @@
               '<button data-filter="all" class="active">All</button>' +
               '<button data-filter="invoice">Invoices</button>' +
               '<button data-filter="quote">Quotes</button>' +
+              '<button data-filter="delivery">Delivery notes</button>' +
               '<button data-filter="archived">Archived</button>' +
             '</div>' +
             '<input type="text" class="search-input" id="doc-search" placeholder="Search by client or number">' +
             '<button class="btn btn-ghost btn-sm" id="new-invoice-btn">New invoice</button>' +
+            '<button class="btn btn-ghost btn-sm" id="new-delivery-btn">New delivery note</button>' +
             '<button class="btn btn-primary btn-sm" id="new-quote-btn">New quote</button>' +
           '</div>' +
         '</div>' +
@@ -1082,6 +1224,7 @@
       '</div>';
     $('new-invoice-btn').addEventListener('click', function(){ startNewDoc('invoice'); showView('new'); });
     $('new-quote-btn').addEventListener('click', function(){ startNewDoc('quote'); showView('new'); });
+    $('new-delivery-btn').addEventListener('click', function(){ startNewDoc('delivery'); showView('new'); });
     $('doc-search').addEventListener('input', function(){ searchText = this.value.toLowerCase(); updateDocumentsList(); });
     $('doc-filter').addEventListener('click', function(e){
       var btn = e.target.closest('button');
@@ -1096,7 +1239,8 @@
     var el = $('documents-list');
     if (!el) return;
     var all = invoices.map(function(d){ return Object.assign({_type:'invoice'}, d); })
-      .concat(quotes.map(function(d){ return Object.assign({_type:'quote'}, d); }));
+      .concat(quotes.map(function(d){ return Object.assign({_type:'quote'}, d); }))
+      .concat(deliveryNotes.map(function(d){ return Object.assign({_type:'delivery'}, d); }));
     all.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
 
     var filtered = all.filter(function(d){
@@ -1113,7 +1257,7 @@
     if (!filtered.length){
       el.innerHTML = all.length
         ? '<div class="empty-state"><h3>No matches</h3><p>Try a different search or filter.</p></div>'
-        : '<div class="empty-state"><h3>Nothing here yet</h3><p>Create your first invoice or quote and it will show up here.</p><button class="btn btn-primary btn-sm" id="empty-new-quote">New quote</button></div>';
+        : '<div class="empty-state"><h3>Nothing here yet</h3><p>Create your first invoice, quote, or delivery note and it will show up here.</p><button class="btn btn-primary btn-sm" id="empty-new-quote">New quote</button></div>';
       var eb = $('empty-new-quote');
       if (eb) eb.addEventListener('click', function(){ startNewDoc('quote'); showView('new'); });
       return;
@@ -1123,12 +1267,13 @@
       var overdue = isPastDue(d);
       var meta = statusMeta(d._type)[d.status] || statusMeta(d._type).draft;
       var clientName = d.clientSnapshot ? d.clientSnapshot.name : 'No client';
+      var dueWordMap = {invoice:'Due ', quote:'Valid ', delivery:'Delivery '};
       return '<div class="list-row" data-id="'+d.id+'" data-type="'+d._type+'">' +
         '<div><span class="type-pill">'+docLabel(d._type,true)+'</span></div>' +
         '<div><div class="num mono">'+esc(d.number)+'</div><div class="meta">'+esc(clientName)+'</div></div>' +
-        '<div><div class="meta">Issued '+formatDate(d.issueDate)+'</div><div class="meta">'+(d._type==='invoice'?'Due ':'Valid ')+formatDate(d.dueDate)+'</div></div>' +
+        '<div><div class="meta">Issued '+formatDate(d.issueDate)+'</div><div class="meta">'+(dueWordMap[d._type]||'')+formatDate(d.dueDate)+'</div></div>' +
         '<div>' + (overdue ? '<span class="chip bad">'+pastDueLabel(d._type)+'</span>' : '<span class="chip '+meta.cls+'">'+meta.label+'</span>') + '</div>' +
-        '<div class="amt mono">'+formatMoney(d.total, d.currency)+'</div>' +
+        '<div class="amt mono">'+(d._type==='delivery' ? '—' : formatMoney(d.total, d.currency))+'</div>' +
         '<div class="row-actions">' +
           '<button class="btn btn-ghost btn-sm act-open">Open</button>' +
           (d.archived
@@ -1141,7 +1286,7 @@
 
     Array.prototype.forEach.call(el.querySelectorAll('.list-row'), function(row){
       var id = row.dataset.id, type = row.dataset.type;
-      var list = type==='invoice' ? invoices : quotes;
+      var list = listForType(type);
       var d = list.find(function(i){ return i.id === id; });
       row.querySelector('.act-open').addEventListener('click', function(){ loadDocIntoEditor(d, type); });
       var pdfBtn = row.querySelector('.act-pdf');
@@ -1153,14 +1298,14 @@
           setTimeout(function(){ if (delBtn.dataset.confirm==='1'){ delBtn.dataset.confirm='0'; delBtn.textContent='Archive'; delBtn.classList.remove('confirming'); } }, 4000);
           return;
         }
-        db.collection(type==='invoice'?'invoices':'quotes').doc(id).update({
+        db.collection(collNameForType(type)).doc(id).update({
           archived:true, archivedAt:new Date().toISOString(), archivedBy: currentUserEmail(),
           updatedAt:new Date().toISOString(), updatedBy: currentUserEmail()
         }).then(function(){ toast(docLabel(type,true)+' archived.'); }).catch(function(){ toast('Could not archive.', true); });
       });
       var restoreBtn = row.querySelector('.act-restore');
       if (restoreBtn) restoreBtn.addEventListener('click', function(){
-        db.collection(type==='invoice'?'invoices':'quotes').doc(id).update({
+        db.collection(collNameForType(type)).doc(id).update({
           archived:false, updatedAt:new Date().toISOString(), updatedBy: currentUserEmail()
         }).then(function(){ toast(docLabel(type,true)+' restored.'); }).catch(function(){ toast('Could not restore.', true); });
       });
@@ -1285,7 +1430,11 @@
           '<div class="field"><label for="set-quote-prefix">Quote number prefix</label><input type="text" id="set-quote-prefix" value="'+esc(settings.quotePrefix)+'" placeholder="QUO-"></div>' +
           '<div class="field"><label for="set-next-quote-number">Next quote number</label><input type="number" min="1" id="set-next-quote-number" value="'+esc(settings.nextQuoteNumber)+'"></div>' +
         '</div>' +
-        '<div class="hint" style="margin-bottom:14px;">Next numbers: invoice <span class="mono">'+esc((settings.invoicePrefix||'INV-')+String(settings.nextNumber||1).padStart(4,'0'))+'</span> &middot; quote <span class="mono">'+esc((settings.quotePrefix||'QUO-')+String(settings.nextQuoteNumber||1).padStart(4,'0'))+'</span>. Changing these only affects documents saved after the change.</div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="set-delivery-prefix">Delivery note number prefix</label><input type="text" id="set-delivery-prefix" value="'+esc(settings.deliveryPrefix)+'" placeholder="DN-"></div>' +
+          '<div class="field"><label for="set-next-delivery-number">Next delivery note number</label><input type="number" min="1" id="set-next-delivery-number" value="'+esc(settings.nextDeliveryNumber)+'"></div>' +
+        '</div>' +
+        '<div class="hint" style="margin-bottom:14px;">Next numbers: invoice <span class="mono">'+esc((settings.invoicePrefix||'INV-')+String(settings.nextNumber||1).padStart(4,'0'))+'</span> &middot; quote <span class="mono">'+esc((settings.quotePrefix||'QUO-')+String(settings.nextQuoteNumber||1).padStart(4,'0'))+'</span> &middot; delivery note <span class="mono">'+esc((settings.deliveryPrefix||'DN-')+String(settings.nextDeliveryNumber||1).padStart(4,'0'))+'</span>. Changing these only affects documents saved after the change.</div>' +
         '<div class="field"><label for="set-payment-details">Payment / banking details</label><textarea id="set-payment-details" placeholder="Bank, account number, branch code">'+esc(settings.paymentDetails)+'</textarea></div>' +
         '<div class="field"><label for="set-default-notes">Default notes / terms</label><textarea id="set-default-notes" placeholder="Pre-fills new invoices and quotes — you can still edit per document">'+esc(settings.defaultNotes)+'</textarea></div>' +
         '<div class="btn-row"><button class="btn btn-primary" id="settings-save">Save settings</button></div>' +
@@ -1303,6 +1452,7 @@
           '<div class="field-row">' +
             '<div class="field"><label for="np-cost">Cost price</label><input type="number" step="0.01" min="0" id="np-cost" value="0"></div>' +
             '<div class="field"><label for="np-price">Selling price (1+ units)</label><input type="number" step="0.01" min="0" id="np-price" value="0"></div>' +
+            '<div class="field"><label for="np-margin">Margin %</label><input type="number" step="0.1" id="np-margin" value="0"></div>' +
           '</div>' +
           '<div class="btn-row" style="margin-top:0;"><button class="btn btn-primary btn-sm" id="np-add">Add product</button></div>' +
         '</div>' +
@@ -1321,6 +1471,8 @@
         nextNumber: Math.max(1, Number($('set-next-number').value)||1),
         quotePrefix: $('set-quote-prefix').value.trim() || 'QUO-',
         nextQuoteNumber: Math.max(1, Number($('set-next-quote-number').value)||1),
+        deliveryPrefix: $('set-delivery-prefix').value.trim() || 'DN-',
+        nextDeliveryNumber: Math.max(1, Number($('set-next-delivery-number').value)||1),
         paymentDetails: $('set-payment-details').value.trim(),
         defaultNotes: $('set-default-notes').value.trim(),
         updatedAt: new Date().toISOString(), updatedBy: currentUserEmail()
@@ -1342,10 +1494,21 @@
         createdAt:new Date().toISOString(), createdBy: currentUserEmail(), updatedBy: currentUserEmail()
       }).then(function(){
         ['np-name','np-desc'].forEach(function(id){ $(id).value=''; });
-        $('np-cost').value = 0; $('np-price').value = 0;
+        $('np-cost').value = 0; $('np-price').value = 0; $('np-margin').value = 0;
         toast('Product added.');
         updateProductsSettingsList();
       }).catch(function(){ toast('Could not add product.', true); });
+    });
+
+    $('add-product-form').addEventListener('input', function(e){
+      var cost = Number($('np-cost').value)||0;
+      if (e.target.id === 'np-cost'){
+        $('np-margin').value = marginPct(Number($('np-price').value)||0, cost).toFixed(1);
+      } else if (e.target.id === 'np-price'){
+        $('np-margin').value = marginPct(Number(e.target.value)||0, cost).toFixed(1);
+      } else if (e.target.id === 'np-margin'){
+        $('np-price').value = priceFromMargin(Number(e.target.value)||0, cost).toFixed(2);
+      }
     });
 
     $('pc-toggle-archived').addEventListener('click', function(){
@@ -1361,8 +1524,10 @@
     var m = marginPct(priceVal, cost);
     return '<div class="tier-box">' +
       '<div class="tier-range">' + (showFrom ? ('From <input type="number" min="2" class="tier-from" value="'+esc(fromVal)+'"> units') : rangeLabel) + '</div>' +
+      '<div class="tier-sublabel">Price</div>' +
       '<input type="number" step="0.01" min="0" class="tier-price" value="'+esc(priceVal)+'">' +
-      '<div class="margin-readout">Margin ' + m.toFixed(1) + '%</div>' +
+      '<div class="tier-sublabel">Margin %</div>' +
+      '<input type="number" step="0.1" class="tier-margin" value="'+m.toFixed(1)+'">' +
     '</div>';
   }
 
@@ -1400,12 +1565,19 @@
 
     Array.prototype.forEach.call(el.querySelectorAll('.product-card'), function(card){
       card.addEventListener('input', function(e){
-        if (!e.target.classList.contains('pc-cost') && !e.target.classList.contains('tier-price')) return;
         var cost = Number(card.querySelector('.pc-cost').value)||0;
-        Array.prototype.forEach.call(card.querySelectorAll('.tier-box'), function(box){
-          var price = Number(box.querySelector('.tier-price').value)||0;
-          box.querySelector('.margin-readout').textContent = 'Margin ' + marginPct(price, cost).toFixed(1) + '%';
-        });
+        if (e.target.classList.contains('pc-cost')){
+          Array.prototype.forEach.call(card.querySelectorAll('.tier-box'), function(box){
+            var price = Number(box.querySelector('.tier-price').value)||0;
+            box.querySelector('.tier-margin').value = marginPct(price, cost).toFixed(1);
+          });
+        } else if (e.target.classList.contains('tier-price')){
+          var priceBox = e.target.closest('.tier-box');
+          priceBox.querySelector('.tier-margin').value = marginPct(Number(e.target.value)||0, cost).toFixed(1);
+        } else if (e.target.classList.contains('tier-margin')){
+          var marginBox = e.target.closest('.tier-box');
+          marginBox.querySelector('.tier-price').value = priceFromMargin(Number(e.target.value)||0, cost).toFixed(2);
+        }
       });
       var saveBtn = card.querySelector('.pc-save');
       if (saveBtn) saveBtn.addEventListener('click', function(){
