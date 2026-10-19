@@ -294,39 +294,54 @@
     draft:{label:'Draft', cls:'draft'}, dispatched:{label:'Dispatched', cls:'sent'},
     delivered:{label:'Delivered', cls:'good'}
   };
+  var ORDER_STATUS_META = {
+    draft:{label:'Draft', cls:'draft'}, confirmed:{label:'Confirmed', cls:'sent'},
+    fulfilled:{label:'Fulfilled', cls:'good'}, cancelled:{label:'Cancelled', cls:'bad'}
+  };
   function statusMeta(type){
     if (type==='invoice') return INVOICE_STATUS_META;
     if (type==='quote') return QUOTE_STATUS_META;
+    if (type==='order') return ORDER_STATUS_META;
     return DELIVERY_STATUS_META;
   }
-  function pastDueLabel(type){ return type==='invoice' ? 'Overdue' : (type==='quote' ? 'Expired' : 'Delayed'); }
+  function pastDueLabel(type){
+    if (type==='invoice') return 'Overdue';
+    if (type==='quote') return 'Expired';
+    if (type==='order') return 'Overdue';
+    return 'Delayed';
+  }
   function docLabel(type, cap){
-    var s = type==='invoice' ? 'invoice' : (type==='quote' ? 'quote' : 'delivery note');
+    var s = type==='invoice' ? 'invoice' : (type==='quote' ? 'quote' : (type==='order' ? 'sales order' : 'delivery note'));
     return cap ? (s.charAt(0).toUpperCase()+s.slice(1)) : s;
   }
   function collNameForType(type){
     if (type==='invoice') return 'invoices';
     if (type==='quote') return 'quotes';
+    if (type==='order') return 'salesOrders';
     return 'deliveryNotes';
   }
   function listForType(type){
     if (type==='invoice') return invoices;
     if (type==='quote') return quotes;
+    if (type==='order') return salesOrders;
     return deliveryNotes;
   }
   function prefixFieldForType(type){
     if (type==='invoice') return 'invoicePrefix';
     if (type==='quote') return 'quotePrefix';
+    if (type==='order') return 'orderPrefix';
     return 'deliveryPrefix';
   }
   function counterFieldForType(type){
     if (type==='invoice') return 'nextNumber';
     if (type==='quote') return 'nextQuoteNumber';
+    if (type==='order') return 'nextOrderNumber';
     return 'nextDeliveryNumber';
   }
   function defaultPrefixForType(type){
     if (type==='invoice') return 'INV-';
     if (type==='quote') return 'QUO-';
+    if (type==='order') return 'SO-';
     return 'DN-';
   }
 
@@ -335,6 +350,7 @@
     currency:'ZAR', taxLabel:'VAT', taxRate:15,
     invoicePrefix:'INV-', nextNumber:1,
     quotePrefix:'QUO-', nextQuoteNumber:1,
+    orderPrefix:'SO-', nextOrderNumber:1,
     deliveryPrefix:'DN-', nextDeliveryNumber:1,
     paymentDetails:'', defaultNotes:''
   };
@@ -347,7 +363,7 @@
   var settingsExists = false, settingsInitTried = false;
   var clients = [];
   var products = [], productsSeedTried = false;
-  var invoices = [], quotes = [], deliveryNotes = [];
+  var invoices = [], quotes = [], salesOrders = [], deliveryNotes = [];
   var currentView = 'new';
   var docType = 'invoice';
   var editingId = null;
@@ -477,6 +493,10 @@
       quotes = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
       if (currentView === 'documents') updateDocumentsList();
     }, function(){});
+    db.collection('salesOrders').orderBy('createdAt','desc').onSnapshot(function(snap){
+      salesOrders = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      if (currentView === 'documents') updateDocumentsList();
+    }, function(){});
     db.collection('deliveryNotes').orderBy('createdAt','desc').onSnapshot(function(snap){
       deliveryNotes = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
       if (currentView === 'documents') updateDocumentsList();
@@ -526,7 +546,7 @@
   function startNewDoc(type){
     editingId = null;
     docType = type;
-    var dueOffset = type==='invoice' ? 14 : (type==='quote' ? 30 : 3);
+    var dueOffset = type==='invoice' ? 14 : (type==='quote' ? 30 : (type==='order' ? 14 : 3));
     var data = {
       clientId:'', issueDate:todayIso(), dueDate:addDaysIso(todayIso(),dueOffset),
       currency:settings.currency||'ZAR', taxRate:(settings.taxRate!=null?settings.taxRate:0),
@@ -549,10 +569,11 @@
   function renderNewView(data, number){
     var root = $('view-new');
     var meta = statusMeta(docType);
-    var dateLabel = docType==='invoice' ? 'Due date' : (docType==='quote' ? 'Valid until' : 'Delivery date');
+    var dateLabel = docType==='invoice' ? 'Due date' : (docType==='quote' ? 'Valid until' : (docType==='order' ? 'Expected date' : 'Delivery date'));
     var notesPlaceholder = docType==='invoice' ? 'Payment due within 14 days. Thank you for your business.'
       : (docType==='quote' ? 'Prices exclude delivery unless stated. Quote valid for the period shown above.'
-      : 'Delivery instructions, access notes, who to contact on-site, etc.');
+      : (docType==='order' ? 'Delivery terms, lead time, purchase order reference, etc.'
+      : 'Delivery instructions, access notes, who to contact on-site, etc.'));
 
     root.innerHTML =
       '<div class="editor-grid">' +
@@ -561,7 +582,7 @@
             '<h2>' + (editingId ? ('Edit '+docLabel(docType,true)) : ('New '+docLabel(docType))) + '</h2>' +
             (editingId
               ? '<div class="editing-flag"><span>Editing <span class="num mono">'+esc(number||'')+'</span></span><button class="link-btn" id="discard-edit">Start new instead</button></div>'
-              : '<div class="seg" id="type-toggle"><button data-type="invoice" class="'+(docType==='invoice'?'active':'')+'">Invoice</button><button data-type="quote" class="'+(docType==='quote'?'active':'')+'">Quote</button><button data-type="delivery" class="'+(docType==='delivery'?'active':'')+'">Delivery note</button></div>') +
+              : '<div class="seg" id="type-toggle"><button data-type="invoice" class="'+(docType==='invoice'?'active':'')+'">Invoice</button><button data-type="quote" class="'+(docType==='quote'?'active':'')+'">Quote</button><button data-type="order" class="'+(docType==='order'?'active':'')+'">Sales order</button><button data-type="delivery" class="'+(docType==='delivery'?'active':'')+'">Delivery note</button></div>') +
           '</div>' +
 
           '<div class="field">' +
@@ -613,8 +634,9 @@
           '<div class="btn-row">' +
             '<button class="btn btn-primary" id="save-btn">Save '+docLabel(docType)+'</button>' +
             '<button class="btn btn-ghost" id="pdf-btn">Download PDF</button>' +
-            (editingId && docType==='quote' ? '<button class="btn btn-ghost" id="convert-btn">Convert to invoice</button>' : '') +
-            (editingId && (docType==='invoice'||docType==='quote') ? '<button class="btn btn-ghost" id="to-delivery-btn">Create delivery note</button>' : '') +
+            (editingId && (docType==='quote'||docType==='order') ? '<button class="btn btn-ghost" id="convert-btn">Convert to invoice</button>' : '') +
+            (editingId && docType==='quote' ? '<button class="btn btn-ghost" id="to-order-btn">Create sales order</button>' : '') +
+            (editingId && (docType==='invoice'||docType==='quote'||docType==='order') ? '<button class="btn btn-ghost" id="to-delivery-btn">Create delivery note</button>' : '') +
             (editingId ? '<button class="btn btn-danger" id="delete-btn" data-confirm="0">Archive '+docLabel(docType)+'</button>' : '') +
           '</div>' +
         '</div>' +
@@ -826,7 +848,15 @@
     var convertBtn = $('convert-btn');
     if (convertBtn){
       convertBtn.addEventListener('click', function(){
-        saveDoc().then(function(rec){ if (rec) return convertQuoteToInvoice(rec); }).catch(function(){});
+        var fromType = docType;
+        saveDoc().then(function(rec){ if (rec) return convertToInvoice(rec, fromType); }).catch(function(){});
+      });
+    }
+    var toOrderBtn = $('to-order-btn');
+    if (toOrderBtn){
+      toOrderBtn.addEventListener('click', function(){
+        var fromType = docType;
+        saveDoc().then(function(rec){ if (rec) return convertToSalesOrder(rec, fromType); }).catch(function(){});
       });
     }
     var toDeliveryBtn = $('to-delivery-btn');
@@ -891,9 +921,9 @@
     var totals = computeTotals(data.items, data.taxRate);
     var list = listForType(docType);
     var num = editingId ? (list.find(function(i){return i.id===editingId;})||{}).number : null;
-    var dateLabel = docType==='invoice' ? 'Due' : (docType==='quote' ? 'Valid until' : 'Delivery');
-    var title = docType==='invoice' ? 'Invoice' : (docType==='quote' ? 'Quote' : 'Delivery Note');
-    var draftLabel = docType==='invoice' ? 'Draft — no number yet' : (docType==='quote' ? 'Draft quote — no number yet' : 'Draft delivery note — no number yet');
+    var dateLabel = docType==='invoice' ? 'Due' : (docType==='quote' ? 'Valid until' : (docType==='order' ? 'Expected' : 'Delivery'));
+    var title = docType==='invoice' ? 'Invoice' : (docType==='quote' ? 'Quote' : (docType==='order' ? 'Sales Order' : 'Delivery Note'));
+    var draftLabel = docType==='invoice' ? 'Draft — no number yet' : (docType==='quote' ? 'Draft quote — no number yet' : (docType==='order' ? 'Draft sales order — no number yet' : 'Draft delivery note — no number yet'));
     var isDelivery = docType === 'delivery';
 
     pv.innerHTML =
@@ -996,7 +1026,7 @@
     }).catch(function(){ toast('Could not save.', true); return null; });
   }
 
-  function convertQuoteToInvoice(quoteRec){
+  function convertToInvoice(rec, fromType){
     if (!db) return Promise.resolve();
     var now = new Date().toISOString();
     var settingsRef = db.doc('settings/business');
@@ -1010,23 +1040,63 @@
     return bump.then(function(){
       settingsExists = true;
       return db.collection('invoices').add({
-        number:number, clientId: quoteRec.clientId||null, clientSnapshot: quoteRec.clientSnapshot||null,
-        issueDate: issue, dueDate: due, currency: quoteRec.currency, items: quoteRec.items,
-        taxRate: quoteRec.taxRate, taxLabel: quoteRec.taxLabel || settings.taxLabel || 'Tax',
-        notes: quoteRec.notes || '', status:'draft',
-        subtotal: quoteRec.subtotal, tax: quoteRec.tax, total: quoteRec.total,
-        fromQuote: quoteRec.number || null, createdAt: now, updatedAt: now,
+        number:number, clientId: rec.clientId||null, clientSnapshot: rec.clientSnapshot||null,
+        issueDate: issue, dueDate: due, currency: rec.currency, items: rec.items,
+        taxRate: rec.taxRate, taxLabel: rec.taxLabel || settings.taxLabel || 'Tax',
+        notes: rec.notes || '', status:'draft',
+        subtotal: rec.subtotal, tax: rec.tax, total: rec.total,
+        fromDoc: rec.number || null, fromDocType: fromType || null, createdAt: now, updatedAt: now,
         createdBy: currentUserEmail(), updatedBy: currentUserEmail()
       });
     }).then(function(ref){
-      if (quoteRec.id) db.collection('quotes').doc(quoteRec.id).update({status:'accepted', updatedAt:now, updatedBy: currentUserEmail()}).catch(function(){});
+      if (rec.id && fromType){
+        var statusUpdate = fromType==='quote' ? 'accepted' : (fromType==='order' ? 'fulfilled' : null);
+        if (statusUpdate){
+          db.collection(collNameForType(fromType)).doc(rec.id).update({
+            status: statusUpdate, updatedAt:now, updatedBy: currentUserEmail()
+          }).catch(function(){});
+        }
+      }
       toast('Converted to invoice '+number+'.');
       loadDocIntoEditor({
-        id: ref.id, number:number, clientId: quoteRec.clientId, clientSnapshot: quoteRec.clientSnapshot,
-        issueDate: issue, dueDate: due, currency: quoteRec.currency, items: quoteRec.items,
-        taxRate: quoteRec.taxRate, status:'draft', notes: quoteRec.notes
+        id: ref.id, number:number, clientId: rec.clientId, clientSnapshot: rec.clientSnapshot,
+        issueDate: issue, dueDate: due, currency: rec.currency, items: rec.items,
+        taxRate: rec.taxRate, status:'draft', notes: rec.notes
       }, 'invoice');
     }).catch(function(){ toast('Could not convert to invoice.', true); });
+  }
+
+  function convertToSalesOrder(rec, fromType){
+    if (!db) return Promise.resolve();
+    var now = new Date().toISOString();
+    var settingsRef = db.doc('settings/business');
+    var prefix = settings.orderPrefix || 'SO-';
+    var nextNum = settings.nextOrderNumber || 1;
+    var number = prefix + String(nextNum).padStart(4,'0');
+    var bump = settingsExists ? settingsRef.update({nextOrderNumber: nextNum+1}) : settingsRef.set(Object.assign({}, DEFAULT_SETTINGS, settings, {nextOrderNumber:nextNum+1, updatedAt:now}));
+    var issue = todayIso();
+    var due = addDaysIso(issue, 14);
+
+    return bump.then(function(){
+      settingsExists = true;
+      return db.collection('salesOrders').add({
+        number:number, clientId: rec.clientId||null, clientSnapshot: rec.clientSnapshot||null,
+        issueDate: issue, dueDate: due, currency: rec.currency, items: rec.items,
+        taxRate: rec.taxRate, taxLabel: rec.taxLabel || settings.taxLabel || 'Tax',
+        notes: rec.notes || '', status:'draft',
+        subtotal: rec.subtotal, tax: rec.tax, total: rec.total,
+        fromDoc: rec.number || null, fromDocType: fromType || null, createdAt: now, updatedAt: now,
+        createdBy: currentUserEmail(), updatedBy: currentUserEmail()
+      });
+    }).then(function(ref){
+      if (rec.id && fromType==='quote') db.collection('quotes').doc(rec.id).update({status:'accepted', updatedAt:now, updatedBy: currentUserEmail()}).catch(function(){});
+      toast('Sales order '+number+' created.');
+      loadDocIntoEditor({
+        id: ref.id, number:number, clientId: rec.clientId, clientSnapshot: rec.clientSnapshot,
+        issueDate: issue, dueDate: due, currency: rec.currency, items: rec.items,
+        taxRate: rec.taxRate, status:'draft', notes: rec.notes
+      }, 'order');
+    }).catch(function(){ toast('Could not create sales order.', true); });
   }
 
   function convertToDeliveryNote(rec, fromType){
@@ -1086,8 +1156,8 @@
 
     var isDelivery = type === 'delivery';
     var ry = 64;
-    var title = type==='invoice' ? 'INVOICE' : (type==='quote' ? 'QUOTE' : 'DELIVERY NOTE');
-    var dateLbl = type==='invoice' ? 'Due date' : (type==='quote' ? 'Valid until' : 'Delivery date');
+    var title = type==='invoice' ? 'INVOICE' : (type==='quote' ? 'QUOTE' : (type==='order' ? 'SALES ORDER' : 'DELIVERY NOTE'));
+    var dateLbl = type==='invoice' ? 'Due date' : (type==='quote' ? 'Valid until' : (type==='order' ? 'Expected date' : 'Delivery date'));
     doc.setFont('helvetica','bold'); doc.setFontSize(21); doc.setTextColor.apply(doc, accent);
     doc.text(title, pageW-marginX, ry, {align:'right'}); ry += 20;
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, ink);
@@ -1211,11 +1281,13 @@
               '<button data-filter="all" class="active">All</button>' +
               '<button data-filter="invoice">Invoices</button>' +
               '<button data-filter="quote">Quotes</button>' +
+              '<button data-filter="order">Sales orders</button>' +
               '<button data-filter="delivery">Delivery notes</button>' +
               '<button data-filter="archived">Archived</button>' +
             '</div>' +
             '<input type="text" class="search-input" id="doc-search" placeholder="Search by client or number">' +
             '<button class="btn btn-ghost btn-sm" id="new-invoice-btn">New invoice</button>' +
+            '<button class="btn btn-ghost btn-sm" id="new-order-btn">New sales order</button>' +
             '<button class="btn btn-ghost btn-sm" id="new-delivery-btn">New delivery note</button>' +
             '<button class="btn btn-primary btn-sm" id="new-quote-btn">New quote</button>' +
           '</div>' +
@@ -1224,6 +1296,7 @@
       '</div>';
     $('new-invoice-btn').addEventListener('click', function(){ startNewDoc('invoice'); showView('new'); });
     $('new-quote-btn').addEventListener('click', function(){ startNewDoc('quote'); showView('new'); });
+    $('new-order-btn').addEventListener('click', function(){ startNewDoc('order'); showView('new'); });
     $('new-delivery-btn').addEventListener('click', function(){ startNewDoc('delivery'); showView('new'); });
     $('doc-search').addEventListener('input', function(){ searchText = this.value.toLowerCase(); updateDocumentsList(); });
     $('doc-filter').addEventListener('click', function(e){
@@ -1240,6 +1313,7 @@
     if (!el) return;
     var all = invoices.map(function(d){ return Object.assign({_type:'invoice'}, d); })
       .concat(quotes.map(function(d){ return Object.assign({_type:'quote'}, d); }))
+      .concat(salesOrders.map(function(d){ return Object.assign({_type:'order'}, d); }))
       .concat(deliveryNotes.map(function(d){ return Object.assign({_type:'delivery'}, d); }));
     all.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
 
@@ -1257,7 +1331,7 @@
     if (!filtered.length){
       el.innerHTML = all.length
         ? '<div class="empty-state"><h3>No matches</h3><p>Try a different search or filter.</p></div>'
-        : '<div class="empty-state"><h3>Nothing here yet</h3><p>Create your first invoice, quote, or delivery note and it will show up here.</p><button class="btn btn-primary btn-sm" id="empty-new-quote">New quote</button></div>';
+        : '<div class="empty-state"><h3>Nothing here yet</h3><p>Create your first invoice, quote, sales order, or delivery note and it will show up here.</p><button class="btn btn-primary btn-sm" id="empty-new-quote">New quote</button></div>';
       var eb = $('empty-new-quote');
       if (eb) eb.addEventListener('click', function(){ startNewDoc('quote'); showView('new'); });
       return;
@@ -1267,7 +1341,7 @@
       var overdue = isPastDue(d);
       var meta = statusMeta(d._type)[d.status] || statusMeta(d._type).draft;
       var clientName = d.clientSnapshot ? d.clientSnapshot.name : 'No client';
-      var dueWordMap = {invoice:'Due ', quote:'Valid ', delivery:'Delivery '};
+      var dueWordMap = {invoice:'Due ', quote:'Valid ', order:'Expected ', delivery:'Delivery '};
       return '<div class="list-row" data-id="'+d.id+'" data-type="'+d._type+'">' +
         '<div><span class="type-pill">'+docLabel(d._type,true)+'</span></div>' +
         '<div><div class="num mono">'+esc(d.number)+'</div><div class="meta">'+esc(clientName)+'</div></div>' +
@@ -1431,10 +1505,14 @@
           '<div class="field"><label for="set-next-quote-number">Next quote number</label><input type="number" min="1" id="set-next-quote-number" value="'+esc(settings.nextQuoteNumber)+'"></div>' +
         '</div>' +
         '<div class="field-row">' +
+          '<div class="field"><label for="set-order-prefix">Sales order number prefix</label><input type="text" id="set-order-prefix" value="'+esc(settings.orderPrefix)+'" placeholder="SO-"></div>' +
+          '<div class="field"><label for="set-next-order-number">Next sales order number</label><input type="number" min="1" id="set-next-order-number" value="'+esc(settings.nextOrderNumber)+'"></div>' +
+        '</div>' +
+        '<div class="field-row">' +
           '<div class="field"><label for="set-delivery-prefix">Delivery note number prefix</label><input type="text" id="set-delivery-prefix" value="'+esc(settings.deliveryPrefix)+'" placeholder="DN-"></div>' +
           '<div class="field"><label for="set-next-delivery-number">Next delivery note number</label><input type="number" min="1" id="set-next-delivery-number" value="'+esc(settings.nextDeliveryNumber)+'"></div>' +
         '</div>' +
-        '<div class="hint" style="margin-bottom:14px;">Next numbers: invoice <span class="mono">'+esc((settings.invoicePrefix||'INV-')+String(settings.nextNumber||1).padStart(4,'0'))+'</span> &middot; quote <span class="mono">'+esc((settings.quotePrefix||'QUO-')+String(settings.nextQuoteNumber||1).padStart(4,'0'))+'</span> &middot; delivery note <span class="mono">'+esc((settings.deliveryPrefix||'DN-')+String(settings.nextDeliveryNumber||1).padStart(4,'0'))+'</span>. Changing these only affects documents saved after the change.</div>' +
+        '<div class="hint" style="margin-bottom:14px;">Next numbers: invoice <span class="mono">'+esc((settings.invoicePrefix||'INV-')+String(settings.nextNumber||1).padStart(4,'0'))+'</span> &middot; quote <span class="mono">'+esc((settings.quotePrefix||'QUO-')+String(settings.nextQuoteNumber||1).padStart(4,'0'))+'</span> &middot; sales order <span class="mono">'+esc((settings.orderPrefix||'SO-')+String(settings.nextOrderNumber||1).padStart(4,'0'))+'</span> &middot; delivery note <span class="mono">'+esc((settings.deliveryPrefix||'DN-')+String(settings.nextDeliveryNumber||1).padStart(4,'0'))+'</span>. Changing these only affects documents saved after the change.</div>' +
         '<div class="field"><label for="set-payment-details">Payment / banking details</label><textarea id="set-payment-details" placeholder="Bank, account number, branch code">'+esc(settings.paymentDetails)+'</textarea></div>' +
         '<div class="field"><label for="set-default-notes">Default notes / terms</label><textarea id="set-default-notes" placeholder="Pre-fills new invoices and quotes — you can still edit per document">'+esc(settings.defaultNotes)+'</textarea></div>' +
         '<div class="btn-row"><button class="btn btn-primary" id="settings-save">Save settings</button></div>' +
@@ -1471,6 +1549,8 @@
         nextNumber: Math.max(1, Number($('set-next-number').value)||1),
         quotePrefix: $('set-quote-prefix').value.trim() || 'QUO-',
         nextQuoteNumber: Math.max(1, Number($('set-next-quote-number').value)||1),
+        orderPrefix: $('set-order-prefix').value.trim() || 'SO-',
+        nextOrderNumber: Math.max(1, Number($('set-next-order-number').value)||1),
         deliveryPrefix: $('set-delivery-prefix').value.trim() || 'DN-',
         nextDeliveryNumber: Math.max(1, Number($('set-next-delivery-number').value)||1),
         paymentDetails: $('set-payment-details').value.trim(),
