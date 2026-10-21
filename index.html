@@ -762,7 +762,7 @@
         var product = products.find(function(p){ return p.id === pid; });
         tr.dataset.productId = pid; tr.dataset.autoprice = '1';
         if (product){
-          tr.querySelector('.item-desc').value = product.description || product.name;
+          tr.querySelector('.item-desc').value = product.description ? (product.name + ' - ' + product.description) : product.name;
           if (docType !== 'delivery'){
             var qty = Number(tr.querySelector('.item-qty').value)||1;
             tr.querySelector('.item-rate').value = findTierPrice(product, qty);
