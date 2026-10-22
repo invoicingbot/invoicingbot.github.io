@@ -927,8 +927,8 @@
     var title = docType==='invoice' ? 'Invoice' : (docType==='quote' ? 'Quote' : (docType==='order' ? 'Sales Order' : 'Delivery Note'));
     var draftLabel = docType==='invoice' ? 'Draft — no number yet' : (docType==='quote' ? 'Draft quote — no number yet' : (docType==='order' ? 'Draft sales order — no number yet' : 'Draft delivery note — no number yet'));
     var isDelivery = docType === 'delivery';
-    var hasSignature = isDelivery || docType === 'order';
-    var signatureLabel = docType === 'order' ? 'Client approval' : 'Received by';
+    var hasSignature = isDelivery || docType === 'order' || docType === 'invoice';
+    var signatureLabel = docType === 'order' ? 'Client approval' : (docType === 'invoice' ? 'Client signature' : 'Received by');
 
     pv.innerHTML =
       '<div class="sheet-top">' +
@@ -1162,8 +1162,8 @@
     });
 
     var isDelivery = type === 'delivery';
-    var hasSignature = isDelivery || type === 'order';
-    var signatureLabel = type === 'order' ? 'Approved by (signature)' : 'Received by (signature)';
+    var hasSignature = isDelivery || type === 'order' || type === 'invoice';
+    var signatureLabel = type === 'order' ? 'Approved by (signature)' : (type === 'invoice' ? 'Client signature' : 'Received by (signature)');
     var ry = 64;
     var title = type==='invoice' ? 'INVOICE' : (type==='quote' ? 'QUOTE' : (type==='order' ? 'SALES ORDER' : 'DELIVERY NOTE'));
     var dateLbl = type==='invoice' ? 'Due date' : (type==='quote' ? 'Valid until' : (type==='order' ? 'Expected date' : 'Delivery date'));
